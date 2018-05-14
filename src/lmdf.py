@@ -1104,13 +1104,17 @@ class HDFChannel(object):
                                                           inv_flip)
 
                         # here add resampling to output space
-
-                        chunk_affine = self.affine
-                        chunk_affine[:3, 3] = start_is_mm
+                        chunk = chunk.transpose(transpose)
+                        chunk = ImageProcessor.reverse_axes(chunk, flip < 0)
+                        chunk_affine = nib.affines.from_matvec(np.diag(d_voxel_size) * SIGN_RAS_A,
+                                                               start_is_mm)
+                        #chunk_affine[:3, 3] = start_is_mm
+                        logger.debug("chunk shape: {}".format(chunk.shape))
+                        logger.debug("chunk affine: {}".format(chunk_affine))
                         meta_image = MetaImage(chunk, chunk_affine,
-                                               self.pixel_type, DIRECTION_LPI, self.is_segmentation)
-                        meta_image.reorient(export_cmd.input_orientation)
-                        meta_image.set_direction_RAS()
+                                               self.pixel_type, DIRECTION_RAS, self.is_segmentation)
+                        #meta_image.reorient(export_cmd.input_orientation)
+                        #meta_image.set_direction_RAS()
 
                         out = ImageProcessor.apply_transformations(meta_image,
                                                                    meta_image,
@@ -1756,10 +1760,17 @@ class ImageProcessor(object):
 
         #input_image = sitk.ReadImage('../results/exp_4/001_10_mm.nii.gz')
         input_image = meta_image.get_sitk_image()
-        output_origin = composite_transform.composite.TransformPoint(input_image.GetOrigin())
-        output_origin = np.array(output_origin) * np.array([-1, -1, 1])
+        sitk.WriteImage(input_image, '../results/exp_4/chunk_to_transform.nii.gz')
+        #output_origin = composite_transform.composite.TransformPoint(input_image.GetOrigin())
+        output_origin = composite_transform.affine_composite.GetInverse().TransformPoint(input_image.GetOrigin())
 
-        output_size = np.array(input_image.GetSize()) + 2* np.round(output_origin / np.array(input_image.GetSpacing()))
+        #output_origin = composite_transform.composite.GetInverse().TransformPoint(input_image.GetOrigin())
+        #output_origin = np.array(output_origin) * np.array([-1, -1, 1])
+
+        output_size = np.array(input_image.GetSize()) #+ 2 * np.abs(np.round(output_origin / np.array(input_image.GetSpacing())))
+
+        logger.debug("output_size: {}".format(output_size))
+        logger.debug("input spacing: {}".format(input_image.GetSpacing()))
 
         #
         #ref_image = sitk.ReadImage('../results/exp_4/template_both_hemispheres_mm.nii.gz')
@@ -2477,12 +2488,27 @@ def test_chunk_export(hdf_path):
 def test_chunk_transform_export(hdf_path):
     lmf = LightMicroscopyHDF(hdf_path)
     list_of_transforms = [TransformTuple(0, 'cfos_to_auto', 'affine', True),
-                          TransformTuple(1, 'cfos_to_template', 'affine', True)]
-    e_cmd = ExportCmd(channel_name='fos', output_path='../results/exp_4/amygdala_native_template_space.nii.gz',
+                          TransformTuple(1, 'inverse_warp_template', 'df', True),
+                          TransformTuple(2, 'cfos_to_template', 'affine', True)]
+    e_cmd = ExportCmd(channel_name='fos', output_path='../results/exp_4/amygdala_native_template_whole.nii.gz',
                       output_resolution=None,
                       input_orientation='PSR', input_resolution_level=0,
                       list_of_transforms=list_of_transforms,
-                      phys_origin=[7.475, 5.975, -4.475], phys_size=[1., 1., 1.],
+                      phys_origin=[7.475, 5.975, -4.475], phys_size=[2.25, 1.25, 3.25],
+                      segmentation_name=None, region_id=None)
+
+    lmf.export_image(e_cmd)
+
+
+def test_auto_chunk_transform_export(hdf_path):
+    lmf = LightMicroscopyHDF(hdf_path)
+    list_of_transforms = [TransformTuple(0, 'inverse_warp_template', 'df', True),
+                          TransformTuple(1, 'auto_to_template', 'affine', True)]
+    e_cmd = ExportCmd(channel_name='autofluo', output_path='../results/exp_4/auto_amygdala_native_template_whole.nii.gz',
+                      output_resolution=None,
+                      input_orientation='PSR', input_resolution_level=0,
+                      list_of_transforms=list_of_transforms,
+                      phys_origin=[7.475, 5.975, -4.475], phys_size=[2.25, 1.25, 3.25],
                       segmentation_name=None, region_id=None)
 
     lmf.export_image(e_cmd)
@@ -2559,4 +2585,5 @@ if __name__ == '__main__':
 
     #test_chunk_export('../results/exp_4_new.h5')
 
-    test_chunk_transform_export('../results/exp_4_new.h5')
+    #test_chunk_transform_export('../results/exp_4_new.h5')
+    test_auto_chunk_transform_export('../results/exp_4_new.h5')
