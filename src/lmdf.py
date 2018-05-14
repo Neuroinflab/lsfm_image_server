@@ -1029,9 +1029,21 @@ class HDFChannel(object):
             logger.debug("sly: {}".format(sly))
             logger.debug("slz: {}".format(slz))
 
+            expected_shape = np.array([slx.stop - slx.start,
+                                       sly.stop - sly.start,
+                                       slz.stop - slz.start])
+
+            logger.debug("Expected chunk shape from source: {}".format(expected_shape))
+
             data = self.h5_file[self.path][slx, sly, slz]
 
-            return data
+            proper_chunk = np.zeros(expected_shape, dtype=data.dtype)
+
+            # TODO: add direction dependence for the artificial margin
+
+            proper_chunk[:data.shape[0], :data.shape[1], :data.shape[2]] = data
+
+            return proper_chunk
 
         def get_meta_image(self, export_cmd):
             """
@@ -1089,7 +1101,8 @@ class HDFChannel(object):
 
                         # lets go back to input space
                         start_is_mm = ct.TransformPoint(start_os_mm)
-                        end_is_mm = ct.TransformPoint(end_os_mm)
+                        # end_is_mm = ct.TransformPoint(end_os_mm) this was taking too small chunks
+                        end_is_mm = tuple(start_is_mm + np.array(export_cmd.phys_size) * np.array([1, 1, -1]))
                         logger.debug("start_is: {} end_is: {}".format(start_is_mm, end_is_mm))
 
                         # grab the chunk
@@ -1760,7 +1773,7 @@ class ImageProcessor(object):
 
         #input_image = sitk.ReadImage('../results/exp_4/001_10_mm.nii.gz')
         input_image = meta_image.get_sitk_image()
-        sitk.WriteImage(input_image, '../results/exp_4/chunk_to_transform.nii.gz')
+        #sitk.WriteImage(input_image, '../results/exp_4/chunk_to_transform.nii.gz')
         #output_origin = composite_transform.composite.TransformPoint(input_image.GetOrigin())
         output_origin = composite_transform.affine_composite.GetInverse().TransformPoint(input_image.GetOrigin())
 
@@ -1789,7 +1802,7 @@ class ImageProcessor(object):
         resampler.SetTransform(composite_transform.composite)
 
         out = resampler.Execute(input_image)
-        sitk.WriteImage(out, '../results/exp_4/test_from_inner_data.nii.gz')
+        #sitk.WriteImage(out, '../results/exp_4/test_from_inner_data.nii.gz')
         return out
 
     @staticmethod
@@ -2490,7 +2503,7 @@ def test_chunk_transform_export(hdf_path):
     list_of_transforms = [TransformTuple(0, 'cfos_to_auto', 'affine', True),
                           TransformTuple(1, 'inverse_warp_template', 'df', True),
                           TransformTuple(2, 'cfos_to_template', 'affine', True)]
-    e_cmd = ExportCmd(channel_name='fos', output_path='../results/exp_4/amygdala_native_template_whole.nii.gz',
+    e_cmd = ExportCmd(channel_name='fos', output_path='../results/exp_4/whole_amygdala_native_template_whole.nii.gz',
                       output_resolution=None,
                       input_orientation='PSR', input_resolution_level=0,
                       list_of_transforms=list_of_transforms,
@@ -2504,7 +2517,7 @@ def test_auto_chunk_transform_export(hdf_path):
     lmf = LightMicroscopyHDF(hdf_path)
     list_of_transforms = [TransformTuple(0, 'inverse_warp_template', 'df', True),
                           TransformTuple(1, 'auto_to_template', 'affine', True)]
-    e_cmd = ExportCmd(channel_name='autofluo', output_path='../results/exp_4/auto_amygdala_native_template_whole.nii.gz',
+    e_cmd = ExportCmd(channel_name='autofluo', output_path='../results/exp_4/whole_auto_amygdala_native_template_whole.nii.gz',
                       output_resolution=None,
                       input_orientation='PSR', input_resolution_level=0,
                       list_of_transforms=list_of_transforms,
@@ -2585,5 +2598,5 @@ if __name__ == '__main__':
 
     #test_chunk_export('../results/exp_4_new.h5')
 
-    #test_chunk_transform_export('../results/exp_4_new.h5')
-    test_auto_chunk_transform_export('../results/exp_4_new.h5')
+    test_chunk_transform_export('../results/exp_4_new.h5')
+    #test_auto_chunk_transform_export('../results/exp_4_new.h5')
