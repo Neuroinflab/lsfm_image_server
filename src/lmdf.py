@@ -21,6 +21,7 @@ from utils import InputImageType
 from utils import ImageComponentType
 from lxml import etree
 from collections import namedtuple
+from scipy.misc import imsave
 
 import logging
 
@@ -586,6 +587,15 @@ class LightMicroscopyHDF(object):
         channel = self.get_channel(export_cmd.channel_name)
         channel.export_image(export_cmd)
 
+    def export_slices(self, export_slices_cmd):
+
+        channel = self.get_channel(export_slices_cmd.channel_name)
+        ref_channel = None
+        if export_slices_cmd.resample:
+            ref_channel = self.get_channel(export_slices_cmd.ref_channel)
+
+        channel.export_slices(export_slices_cmd, ref_channel)
+
     def write_channel(self, image_proxy, create_bdv=True):
 
         data_sets = []
@@ -942,6 +952,17 @@ class HDFChannel(object):
         seg = sitk.Cast(seg, sitk.sitkInt16)
         return seg
 
+    def export_slices(self, cmd, ref_channel):
+
+        """
+
+        :type cmd: ExportSlicesCmd
+        :type ref_channel: HDFChannel
+        """
+        if not cmd.resample:
+            self.pyramid_levels[cmd.input_resolution_level].get_slices(cmd)
+
+
     def export_image(self, export_cmd):
         """
 
@@ -966,7 +987,7 @@ class HDFChannel(object):
                                           transform_tuple.name, df)
                     transforms.append(transform)
                 else:
-                    raise NotImplementedError("Other transforms than affine are not implemented yet")
+                    raise NotImplementedError("Wrong transformation type")
             export_cmd.list_of_transforms = transforms
 
         if export_cmd.input_resolution_level is None:
@@ -1014,11 +1035,55 @@ class HDFChannel(object):
             return self.data
 
         @staticmethod
-        def get_slice(start, end, flip):
+        def get_slice(start, end, flip, step=1):
             if flip:
-                return slice(-end, -start)
+                return slice(-end, -start, step)
             else:
-                return slice(start, end)
+                return slice(start, end, step)
+
+        @staticmethod
+        def batch_slices(slc, num=15):
+            num_slabs = (slc.stop - slc.start) / slc.step // num
+            for i in range(num_slabs):
+                yield slice(slc.start + i * num, slc.start + (i + 1) * num * slc.step, slc.step)
+            yield slice(slc.start + num_slabs * num * slc.step, slc.stop, slc.step)
+
+        def get_slices(self, cmd):
+            """
+
+            :type cmd: ExportSlicesCmd
+            """
+
+            transpose, flip = ImageProcessor.get_transpose(cmd.input_orientation)
+            inv_transpose = np.argsort(transpose)
+            inv_flip = flip[inv_transpose] < 0
+            axis = transpose[cmd.axis]
+            axis_inverse = flip[cmd.axis] < 0
+            axis_w, axis_h = np.delete(transpose, cmd.axis, 0)
+            print axis
+            print axis_w
+            print axis_h
+
+            sl_main = self.get_slice(cmd.start, cmd.stop, axis_inverse, step=cmd.step)
+            sl_w = self.get_slice(cmd.roi_ox, cmd.roi_ox + cmd.roi_sx, inv_flip[axis_w])
+            sl_h = self.get_slice(cmd.roi_oy, cmd.roi_oy + cmd.roi_sy, inv_flip[axis_h])
+
+            plane_count = 0
+            sl_dict = dict()
+
+            sl_dict[axis_w] = sl_w
+            sl_dict[axis_h] = sl_h
+
+            for main_slice in self.batch_slices(sl_main):
+                sl_dict[axis] = main_slice
+                print sl_dict
+                data = self.h5_file[self.path][sl_dict[0], sl_dict[1], sl_dict[2]]
+                for plane in data:
+                    imsave(cmd.output_path % plane_count + cmd.output_ext, plane)
+                    plane_count += 1
+
+
+
 
         def get_level_chunk_data(self, start_idx, end_idx, flip):
             slx = self.get_slice(start_idx[0], end_idx[0], flip[0])
@@ -1037,6 +1102,9 @@ class HDFChannel(object):
 
             data = self.h5_file[self.path][slx, sly, slz]
 
+            return data
+            '''override
+
             proper_chunk = np.zeros(expected_shape, dtype=data.dtype)
 
             # TODO: add direction dependence for the artificial margin
@@ -1044,6 +1112,7 @@ class HDFChannel(object):
             proper_chunk[:data.shape[0], :data.shape[1], :data.shape[2]] = data
 
             return proper_chunk
+            end override'''
 
         def get_meta_image(self, export_cmd):
             """
@@ -1117,6 +1186,7 @@ class HDFChannel(object):
                                                           inv_flip)
 
                         # here add resampling to output space
+                        '''start override
                         chunk = chunk.transpose(transpose)
                         chunk = ImageProcessor.reverse_axes(chunk, flip < 0)
                         chunk_affine = nib.affines.from_matvec(np.diag(d_voxel_size) * SIGN_RAS_A,
@@ -1133,17 +1203,17 @@ class HDFChannel(object):
                                                                    meta_image,
                                                                    composite_transform)
                         sitk.WriteImage(out, export_cmd.output_path)
+                        stop override'''
 
 
                         # for now just see what we got
-                        '''chunk = chunk.transpose(transpose)
+                        chunk = chunk.transpose(transpose)
                         chunk = ImageProcessor.reverse_axes(chunk, flip < 0)
                         img_data = sitk.GetImageFromArray(chunk.transpose())
                         img_data.SetSpacing(d_voxel_size)
                         img_data.SetOrigin(start_is_mm)
                         img_data.SetDirection(DIRECTION_RAS)
-                        sitk.WriteImage(img_data, export_cmd.output_path)'''
-
+                        sitk.WriteImage(img_data, export_cmd.output_path)
 
             if export_cmd.export_region:
                 if not export_cmd.resample_image:
@@ -1186,7 +1256,7 @@ class HDFChannel(object):
                     img_data.SetOrigin(start_mm)
                     img_data.SetDirection(DIRECTION_RAS)
 
-                    # now extract the region
+                    # now extract the region # TODO parametrize to specify if chunk or actual region preferred
                     #region = ImageProcessor.extract_labeled_region(export_cmd.region_id,
                     #                                               img_data,
                     #                                               export_cmd.segmentation)
@@ -1258,6 +1328,31 @@ class HDFChannel(object):
                                                                          self.physical_size[0],
                                                                          self.physical_size[1],
                                                                          self.physical_size[2])
+
+
+class ExportSlicesCmd(object):
+    def __init__(self, channel_name, output_path, input_orientation,
+                 input_resolution_level, slicing_range, axis, extract_roi,
+                 ref_channel, ref_level):
+        if extract_roi is None:
+            extract_roi = [None, None, None, None]
+
+        self.axis = axis
+        self.channel_name = channel_name
+        self.start, self.stop, self.step = np.array(slicing_range)
+        self.output_path, self.output_ext = os.path.splitext(output_path)
+        self.roi_ox, self.roi_oy, self.roi_sx, self.roi_sy = np.array(extract_roi)
+        self.ref_channel = ref_channel
+        self.ref_level = ref_level
+        self.input_orientation = input_orientation
+        self.input_resolution_level = input_resolution_level
+        if self.ref_channel is not None:
+            self.input_orientation = 'RAS'
+
+    @property
+    def resample(self):
+        if self.ref_channel is not None:
+            return True
 
 
 class ExportCmd(object):
@@ -2420,12 +2515,39 @@ def test_template_export(hdf_path):
 def write_exp4_affine(hdf_path):
 
     lmf = LightMicroscopyHDF(hdf_path)
-    channel = lmf.get_channel('fos')
+    channel = lmf.get_channel('cfos')
     channel.write_affine('cfos_to_auto',
                          '/home/sbednarek/DEV/lsfm_schema/lsfm_image_server/results/exp_4/structure_001_to_signal_001_physical_affine.txt')
 
     channel.write_affine('cfos_to_template',
                          '/home/sbednarek/DEV/lsfm_schema/lsfm_image_server/results/exp_4/template_right_physical_to_signal_001_Affine.txt')
+
+
+def write_transforms_signal(hdf_path, channel_name, dir_path,
+                            inverse_warp='inverse_warp_structural_001.nii.gz',
+                            inverse_warp_json='inverse_warp.json',
+                            signal_to_structural='structure_001_to_signal_001_physical_affine.txt',
+                            signal_to_template='template_right_physical_to_signal_001_Affine.txt'):
+
+    lmf = LightMicroscopyHDF(hdf_path)
+    channel = lmf.get_channel(channel_name)
+
+    channel.write_affine('cfos_to_auto',
+                         os.path.join(dir_path, signal_to_structural))
+
+    channel.write_affine('cfos_to_template',
+                         os.path.join(dir_path, signal_to_template))
+
+    meta = dm.ImageMetaData(os.path.join(dir_path, inverse_warp))
+    with open(os.path.join(dir_path, inverse_warp_json)) as fp:
+        json_meta = json.load(fp)
+
+    meta.update(json_meta)
+
+    ip = ImageProxy.get_image_proxy_class(meta)('inverse_warp_template', 'some_id', None, meta, None, 2.,
+                                                is_multichannel=True)
+
+    lmf.write_channel(ip)
 
 
 def add_displacement_field(image_path, json_path, hdf_path):
@@ -2476,12 +2598,12 @@ def test_exp4_cfos_export(hdf_path):
 
 def test_region_export(hdf_path):
     lmf = LightMicroscopyHDF(hdf_path)
-    e_cmd = ExportCmd(channel_name='fos', output_path='../results/exp_4/reg_311_level_2.nii.gz',
+    e_cmd = ExportCmd(channel_name='fos', output_path='../results/exp_4/extracted_reg_382_level_0.nii.gz',
                       output_resolution=None,
                       input_orientation='PSR', input_resolution_level=0,
                       list_of_transforms=[],
                       phys_origin=None, phys_size=None,
-                      segmentation_name='right_signal_segmentation', region_id=311)
+                      segmentation_name='right_signal_segmentation', region_id=382)
 
     lmf.export_image(e_cmd)
 
@@ -2498,12 +2620,13 @@ def test_chunk_export(hdf_path):
     lmf.export_image(e_cmd)
 
 
-def test_chunk_transform_export(hdf_path):
+def test_chunk_transform_export(hdf_path, channel_name='cfos', output_path='../results/chunk.nii.gz'):
     lmf = LightMicroscopyHDF(hdf_path)
     list_of_transforms = [TransformTuple(0, 'cfos_to_auto', 'affine', True),
                           TransformTuple(1, 'inverse_warp_template', 'df', True),
                           TransformTuple(2, 'cfos_to_template', 'affine', True)]
-    e_cmd = ExportCmd(channel_name='fos', output_path='../results/exp_4/whole_amygdala_native_template_whole.nii.gz',
+    e_cmd = ExportCmd(channel_name=channel_name,
+                      output_path=output_path,
                       output_resolution=None,
                       input_orientation='PSR', input_resolution_level=0,
                       list_of_transforms=list_of_transforms,
@@ -2525,6 +2648,16 @@ def test_auto_chunk_transform_export(hdf_path):
                       segmentation_name=None, region_id=None)
 
     lmf.export_image(e_cmd)
+
+
+def test_slice_export(hdf_path, channel, output_path):
+    lmf = LightMicroscopyHDF(hdf_path)
+    e_cmd = ExportSlicesCmd(channel_name=channel, output_path=output_path, input_orientation="PSR",
+                            input_resolution_level=1, slicing_range=[20, 400, 2], axis=1,
+                            extract_roi=[1, 1, 500, 500],
+                            ref_channel=None, ref_level=None)
+
+    lmf.export_slices(e_cmd)
 
 
 if __name__ == '__main__':
@@ -2586,7 +2719,11 @@ if __name__ == '__main__':
 
     #write_exp4_affine('../results/exp_4_new.h5')
 
+    #write_exp4_affine('/home/sbednarek/DEV/lsfm/results/experimental_4.h5')
+
     #add_displacement_field(df_path, df_json_path, '../results/exp_4_new.h5')
+
+    #add_displacement_field(df_path, df_json_path, '/home/sbednarek/DEV/lsfm/results/experimental_4.h5')
 
     #test_exp4_export('../results/exp_4_new.h5')
 
@@ -2598,5 +2735,25 @@ if __name__ == '__main__':
 
     #test_chunk_export('../results/exp_4_new.h5')
 
-    test_chunk_transform_export('../results/exp_4_new.h5')
+    #test_chunk_transform_export('../results/exp_4_new.h5')
     #test_auto_chunk_transform_export('../results/exp_4_new.h5')
+
+    #test_chunk_transform_export('/home/sbednarek/DEV/lsfm/results/experimental_4.h5')
+
+    #test_chunk_transform_export('/mnt/nicl/home/pmajka/results/experimental_5.h5',
+    #                            output_path='../results/experimental_5/in_cfos_whole_amygdala_native_cfos.nii.gz')
+
+    #write_transforms_signal('/mnt/nicl/home/pmajka/results/experimental_5.h5', 'cfos',
+    #                        '/home/sbednarek/DEV/lsfm_pipeline/000012/lsfm_image_server/30_transforms/')
+
+    #test_chunk_transform_export('/mnt/nicl/home/pmajka/results/experimental_3.h5',
+    #                            output_path='../results/experimental_3/in_cfos_whole_amygdala_native_cfos.nii.gz')
+
+    #test_chunk_transform_export('/mnt/nicl/home/pmajka/results/experimental_2.h5',
+    #                            output_path='../results/experimental_2/in_cfos_whole_amygdala_native_cfos.nii.gz')
+
+    #test_chunk_transform_export('/mnt/nicl/home/pmajka/results/control_2.h5',
+    #                            output_path='../results/control_2/in_cfos_whole_amygdala_native_cfos.nii.gz')
+
+
+    test_slice_export('../results/exp_4_new.h5', 'autofluo', '../results/slices/img_%04d.tif')
