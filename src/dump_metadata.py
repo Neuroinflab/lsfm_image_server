@@ -241,6 +241,9 @@ def getImageMetaDataClass(file_path, module=sys.modules[ImageMetaData.__module__
                 file_type = InputImageType.ImageJTiff
         elif page.is_imagej:
             file_type = InputImageType.ImageJTiff
+        else:
+            # best guess we can make - missing info will be provided by the user
+            file_type = InputImageType.ImageJTiff
 
     subclass = "%sImageMetaData" % file_type.name
     return hasattr(module, subclass) and getattr(module, subclass) or ImageMetaData
