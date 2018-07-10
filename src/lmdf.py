@@ -22,6 +22,7 @@ from utils import ImageComponentType
 from lxml import etree
 from collections import namedtuple
 from scipy.misc import imsave
+from skimage.transform import resize
 
 import logging
 
@@ -590,11 +591,10 @@ class LightMicroscopyHDF(object):
     def export_slices(self, export_slices_cmd):
 
         channel = self.get_channel(export_slices_cmd.channel_name)
-        ref_channel = None
         if export_slices_cmd.resample:
-            ref_channel = self.get_channel(export_slices_cmd.ref_channel)
+            export_slices_cmd.ref_channel = self.get_channel(export_slices_cmd.ref_channel)
 
-        channel.export_slices(export_slices_cmd, ref_channel)
+        channel.export_slices(export_slices_cmd)
 
     def write_channel(self, image_proxy, create_bdv=True):
 
@@ -952,7 +952,7 @@ class HDFChannel(object):
         seg = sitk.Cast(seg, sitk.sitkInt16)
         return seg
 
-    def export_slices(self, cmd, ref_channel):
+    def export_slices(self, cmd):
 
         """
 
@@ -961,6 +961,9 @@ class HDFChannel(object):
         """
         if not cmd.resample:
             self.pyramid_levels[cmd.input_resolution_level].get_slices(cmd)
+
+        else:
+            self.pyramid_levels[cmd.input_resolution_level].get_resampled_slices(cmd)
 
 
     def export_image(self, export_cmd):
@@ -1035,7 +1038,7 @@ class HDFChannel(object):
             return self.data
 
         @staticmethod
-        def get_slice(start, end, flip, step=1):
+        def get_slice(start, end, flip=False, step=1):
             if flip:
                 return slice(-end, -start, step)
             else:
@@ -1048,6 +1051,113 @@ class HDFChannel(object):
                 yield slice(slc.start + i * num, slc.start + (i + 1) * num * slc.step, slc.step)
             yield slice(slc.start + num_slabs * num * slc.step, slc.stop, slc.step)
 
+
+        def get_resampled_slices(self, cmd):
+            """
+            :type cmd: ExportSlicesCmd
+            :param cmd:
+            :return:
+            """
+            logger.debug("input orientation {}".format(cmd.ref_orientation))
+            transpose, flip = ImageProcessor.get_transpose(cmd.ref_orientation)
+            inv_transpose = np.argsort(transpose)
+            logger.debug("transpose: {}\n flip: {}".format(transpose, flip))
+            target_spacing = cmd.ref_channel.pyramid_levels[cmd.ref_level].voxel_size[transpose]
+            logger.debug("target_spacing: {}".format(target_spacing))
+            logger.debug("source spacing: {}".format(self.voxel_size))
+
+            scale_factors = self.voxel_size / target_spacing
+            logger.debug("scaling_factors: {}".format(scale_factors))
+
+            target_size = cmd.ref_channel.pyramid_levels[cmd.ref_level].shape[transpose]
+            logger.debug("target size: {}".format(target_size))
+           #source_size = self.shape[transpose]
+            logger.debug("source image size: {}".format(self.shape))
+
+            cmd_tmp = ExportCmd(None, None, None, 'RAS', 0, [], None, None, None, None)
+            seg_meta_image = self.get_meta_image(cmd_tmp)
+            seg = seg_meta_image.get_sitk_image()
+            seg = sitk.Cast(seg, sitk.sitkInt16)
+
+            logger.debug("seg size: {}".format(seg.GetSize()))
+
+            roi_filter = sitk.RegionOfInterestImageFilter()
+
+            ## try to make this axis-agnostic
+            if cmd.start is None:
+                cmd.start = 0
+            if cmd.stop is None:
+                cmd.stop = self.shape[cmd.axis]
+
+            start_index = [0, 0, 0]
+            start_index[cmd.axis] = cmd.start
+
+            slab_size = np.copy(self.shape)
+            planes_to_resample = 10
+            slab_size[cmd.axis] = planes_to_resample #cmd.step
+            print(float(self.shape[cmd.axis]))
+            output_planes_per_input_planes = target_size[cmd.axis] / float(self.shape[cmd.axis])
+
+            logger.debug("output planes per input planes: {}".format(output_planes_per_input_planes))
+            roi_filter.SetSize(slab_size)
+            plane_no = 0
+            for slab_start in xrange(cmd.start, cmd.stop - cmd.step, cmd.step):
+                start_index[cmd.axis] = slab_start
+                logger.debug("start index: {}".format(start_index))
+                logger.debug("slab size: {}".format(slab_size))
+                roi_filter.SetIndex(start_index)
+                roi_slab = roi_filter.Execute(seg)
+                resampled_slab = ImageProcessor.resample_sitk(roi_slab, scale_factors, sitk.sitkNearestNeighbor)
+                slab_data = sitk.GetArrayFromImage(resampled_slab)
+                logger.debug("slab shape: {}".format(slab_data.shape))
+                #some_plane = slab_data[:, 5, :]
+                #imsave(cmd.output_path % slab_start + cmd.output_ext, some_plane)
+                current_plane = start_index[cmd.axis] * output_planes_per_input_planes
+                logger.debug("current plane: {}".format(current_plane))
+
+                #chosen_planes = slab_data[:, ::cmd.step, :]
+                chosen_planes = slab_data
+                for i in xrange(chosen_planes.shape[cmd.axis]):
+                    #print("---> "+ str(current_plane + i))
+                    if round(current_plane + i) % cmd.step == 0:
+                        #print(current_plane + i)
+                        imsave(cmd.output_path % round(current_plane + i) + cmd.output_ext,
+                               chosen_planes[:, i, :])
+
+                    #print(cmd.output_path % plane_no + cmd.output_ext)
+                    #print(current_plane + i * cmd.step)
+                    #imsave(cmd.output_path % round(current_plane + i * cmd.step) + cmd.output_ext,
+                    #       chosen_planes[:, i, :])
+                    #imsave(cmd.output_path % plane_no + cmd.output_ext, chosen_planes[:, i, :])
+                    #plane_no += 1
+
+
+
+            ##
+
+
+
+            '''index = [0, 0, 0]
+            size = [180, 20, 239]
+
+            roi_filter.SetIndex(index)
+            roi_filter.SetSize(size)
+
+            roi_slab = roi_filter.Execute(seg)
+
+            resampled_slab = ImageProcessor.resample_sitk(roi_slab, scale_factors, sitk.sitkLinear)
+            #sitk.WriteImage(resampled_slab, '../results/slab_smally.nii.gz')
+            slab_data = sitk.GetArrayFromImage(resampled_slab)
+            logger.debug("slab shape: {}".format(slab_data.shape))
+            some_plane = slab_data[:, 15, :]
+            imsave('../results/seg_plane_15.tif', some_plane)'''
+
+
+            #compute scaling factors
+            #get meta image for a slab
+            #resample slab, get slices, output images
+
+
         def get_slices(self, cmd):
             """
 
@@ -1055,18 +1165,29 @@ class HDFChannel(object):
             """
 
             transpose, flip = ImageProcessor.get_transpose(cmd.input_orientation)
+            logger.debug("transpose: {}\n flip: {}".format(transpose, flip))
             inv_transpose = np.argsort(transpose)
+            logger.debug("inverse transpose: {}".format(inv_transpose))
             inv_flip = flip[inv_transpose] < 0
             axis = transpose[cmd.axis]
             axis_inverse = flip[cmd.axis] < 0
+            logger.debug("inverse main axis: {}".format(axis_inverse))
             axis_w, axis_h = np.delete(transpose, cmd.axis, 0)
             print axis
             print axis_w
             print axis_h
 
-            sl_main = self.get_slice(cmd.start, cmd.stop, axis_inverse, step=cmd.step)
+            #sl_main = self.get_slice(cmd.start, cmd.stop, axis_inverse, step=cmd.step)
+            sl_main = self.get_slice(cmd.start, cmd.stop, False, step=cmd.step)
             sl_w = self.get_slice(cmd.roi_ox, cmd.roi_ox + cmd.roi_sx, inv_flip[axis_w])
             sl_h = self.get_slice(cmd.roi_oy, cmd.roi_oy + cmd.roi_sy, inv_flip[axis_h])
+
+            logger.debug("sl_main: {}".format(sl_main))
+
+
+
+            logger.debug("voxel size h: {0:.4f}".format(self.voxel_size[axis_h]))
+            logger.debug("voxel size w: {0:.4f}".format(self.voxel_size[axis_w]))
 
             plane_count = 0
             sl_dict = dict()
@@ -1074,16 +1195,27 @@ class HDFChannel(object):
             sl_dict[axis_w] = sl_w
             sl_dict[axis_h] = sl_h
 
-            for main_slice in self.batch_slices(sl_main):
+            list_of_batch_slices = list(self.batch_slices(sl_main))
+            list_of_batch_slices = list_of_batch_slices[::-1]
+            print(list_of_batch_slices)
+
+
+            #for main_slice in self.batch_slices(sl_main):
+            for main_slice in list_of_batch_slices:
+                #main_slice = slice(main_slice.start * -1, main_slice.stop * -1, main_slice.step)
+                print main_slice
                 sl_dict[axis] = main_slice
                 print sl_dict
                 data = self.h5_file[self.path][sl_dict[0], sl_dict[1], sl_dict[2]]
+
+                data = data.transpose([axis, axis_h, axis_w])
+                if axis_inverse:
+                    data = data[::-1]
+                logger.debug("batch data shape: {}".format(data.shape))
+
                 for plane in data:
                     imsave(cmd.output_path % plane_count + cmd.output_ext, plane)
                     plane_count += 1
-
-
-
 
         def get_level_chunk_data(self, start_idx, end_idx, flip):
             slx = self.get_slice(start_idx[0], end_idx[0], flip[0])
@@ -1101,18 +1233,38 @@ class HDFChannel(object):
             logger.debug("Expected chunk shape from source: {}".format(expected_shape))
 
             data = self.h5_file[self.path][slx, sly, slz]
+            logger.debug("actual shape of data: {}".format(data.shape))
 
-            return data
-            '''override
+            shape_difference = expected_shape - data.shape
+            logger.debug("Difference in shape: {}".format(shape_difference))
+
+            data_slx = self.get_slice(0, data.shape[0])
+            data_sly = self.get_slice(0, data.shape[1])
+            data_slz = self.get_slice(0, data.shape[2])
+
+            if np.abs(slx.start) > self.shape[0]:
+                data_slx = self.get_slice(-data.shape[0]-1, -1)
+            if np.abs(sly.start) > self.shape[1]:
+                data_sly = self.get_slice(-data.shape[1]-1, -1)
+            if np.abs(slz.start) > self.shape[2]:
+                data_slz = self.get_slice(-data.shape[2]-1, -1)
+
+
+            '''
+            data = self.h5_file[self.path][slx, sly, slz]
+
+            return data'''
+            # returned trasformed data
 
             proper_chunk = np.zeros(expected_shape, dtype=data.dtype)
 
             # TODO: add direction dependence for the artificial margin
 
-            proper_chunk[:data.shape[0], :data.shape[1], :data.shape[2]] = data
+            #proper_chunk[:data.shape[0], :data.shape[1], :data.shape[2]] = data
+            proper_chunk[data_slx, data_sly, data_slz] = data
 
             return proper_chunk
-            end override'''
+
 
         def get_meta_image(self, export_cmd):
             """
@@ -1165,6 +1317,8 @@ class HDFChannel(object):
 
                     # if there are transforms
                     else:
+
+                        logger.debug("level shape: {}".format(self.shape))
                         composite_transform = CompositeTransform(export_cmd.list_of_transforms)
                         ct = composite_transform.composite
 
@@ -1186,7 +1340,8 @@ class HDFChannel(object):
                                                           inv_flip)
 
                         # here add resampling to output space
-                        '''start override
+
+                        # if we want trasformed data:
                         chunk = chunk.transpose(transpose)
                         chunk = ImageProcessor.reverse_axes(chunk, flip < 0)
                         chunk_affine = nib.affines.from_matvec(np.diag(d_voxel_size) * SIGN_RAS_A,
@@ -1203,17 +1358,18 @@ class HDFChannel(object):
                                                                    meta_image,
                                                                    composite_transform)
                         sitk.WriteImage(out, export_cmd.output_path)
-                        stop override'''
+                        # end trasformateion
 
 
-                        # for now just see what we got
+                        # for untransformed data:
+                        '''
                         chunk = chunk.transpose(transpose)
                         chunk = ImageProcessor.reverse_axes(chunk, flip < 0)
                         img_data = sitk.GetImageFromArray(chunk.transpose())
                         img_data.SetSpacing(d_voxel_size)
                         img_data.SetOrigin(start_is_mm)
                         img_data.SetDirection(DIRECTION_RAS)
-                        sitk.WriteImage(img_data, export_cmd.output_path)
+                        sitk.WriteImage(img_data, export_cmd.output_path)'''
 
             if export_cmd.export_region:
                 if not export_cmd.resample_image:
@@ -1333,7 +1489,7 @@ class HDFChannel(object):
 class ExportSlicesCmd(object):
     def __init__(self, channel_name, output_path, input_orientation,
                  input_resolution_level, slicing_range, axis, extract_roi,
-                 ref_channel, ref_level):
+                 ref_channel=None, ref_level=None, ref_orientation=None):
         if extract_roi is None:
             extract_roi = [None, None, None, None]
 
@@ -1344,6 +1500,7 @@ class ExportSlicesCmd(object):
         self.roi_ox, self.roi_oy, self.roi_sx, self.roi_sy = np.array(extract_roi)
         self.ref_channel = ref_channel
         self.ref_level = ref_level
+        self.ref_orientation = ref_orientation
         self.input_orientation = input_orientation
         self.input_resolution_level = input_resolution_level
         if self.ref_channel is not None:
@@ -1949,6 +2106,41 @@ class ImageProcessor(object):
         return output_data
 
     @staticmethod
+    def resample_sitk(sitk_image, scale_factors, interpolation_type):
+
+        scale_factors = np.array(scale_factors, dtype=np.float64)
+
+        input_size = np.array(sitk_image.GetSize(), dtype=np.float64)
+        output_size = np.int16(np.floor(input_size * scale_factors))
+        output_size[0] = int(round(input_size[0] * scale_factors[0]))
+
+        voxel_size = np.array(sitk_image.GetSpacing())
+
+        output_spacing = voxel_size * input_size
+        output_spacing = output_spacing / output_size
+
+        input_offset = ImageProcessor.compute_offset(sitk_image, voxel_size)
+        output_offset = ImageProcessor.compute_offset(sitk_image, output_spacing)
+
+        output_origin = np.array(sitk_image.GetOrigin()) - input_offset + output_offset
+        output_origin = np.diag(output_origin)
+
+        identity_transform = sitk.AffineTransform(3)
+
+        resampler = sitk.ResampleImageFilter()
+        resampler.SetInterpolator(interpolation_type)
+        resampler.SetDefaultPixelValue(0)
+        resampler.SetTransform(identity_transform)
+        resampler.SetSize((map(int, output_size)))
+        resampler.SetOutputOrigin(tuple(output_origin))
+        resampler.SetOutputSpacing(tuple(output_spacing))
+        resampler.SetOutputDirection(sitk_image.GetDirection())
+
+        output_image = resampler.Execute(sitk_image)
+
+        return output_image
+
+    @staticmethod
     def resample_image(meta_image, scale_factors, debug=False):
 
         """
@@ -2471,7 +2663,7 @@ def write_seg_to_hdf(image_path, json_path, hdf_path):
 
     meta.update(json_meta)
 
-    ip = ImageProxy.get_image_proxy_class(meta)('right_signal_segmentation', 'mysz', None, meta, 'w.xml', 2.,
+    ip = ImageProxy.get_image_proxy_class(meta)('autofluo_segmentation', 'mysz', None, meta, 'w.xml', 2.,
                                                 is_multichannel=False, is_segmentation=True)
 
     lm_test = LightMicroscopyHDF(hdf_path)
@@ -2620,7 +2812,7 @@ def test_chunk_export(hdf_path):
     lmf.export_image(e_cmd)
 
 
-def test_chunk_transform_export(hdf_path, channel_name='cfos', output_path='../results/chunk.nii.gz'):
+def test_chunk_transform_export(hdf_path, channel_name='cfos', output_path='../results/check_margis_2.nii.gz'):
     lmf = LightMicroscopyHDF(hdf_path)
     list_of_transforms = [TransformTuple(0, 'cfos_to_auto', 'affine', True),
                           TransformTuple(1, 'inverse_warp_template', 'df', True),
@@ -2631,6 +2823,8 @@ def test_chunk_transform_export(hdf_path, channel_name='cfos', output_path='../r
                       input_orientation='PSR', input_resolution_level=0,
                       list_of_transforms=list_of_transforms,
                       phys_origin=[7.475, 5.975, -4.475], phys_size=[2.25, 1.25, 3.25],
+                      #phys_origin=[7.475, 5.975, -4.475], phys_size=[1., 1., 1.],
+                      #phys_origin=[5.325, 6.6, -1.975], phys_size=[1.7, 1.5, 1.5],
                       segmentation_name=None, region_id=None)
 
     lmf.export_image(e_cmd)
@@ -2640,7 +2834,7 @@ def test_auto_chunk_transform_export(hdf_path):
     lmf = LightMicroscopyHDF(hdf_path)
     list_of_transforms = [TransformTuple(0, 'inverse_warp_template', 'df', True),
                           TransformTuple(1, 'auto_to_template', 'affine', True)]
-    e_cmd = ExportCmd(channel_name='autofluo', output_path='../results/exp_4/whole_auto_amygdala_native_template_whole.nii.gz',
+    e_cmd = ExportCmd(channel_name='autofluo', output_path='../results/exp_4/auto.nii.gz',
                       output_resolution=None,
                       input_orientation='PSR', input_resolution_level=0,
                       list_of_transforms=list_of_transforms,
@@ -2678,6 +2872,8 @@ if __name__ == '__main__':
     template_path = '/home/sbednarek/DEV/lsfm_schema/lsfm_image_server/results/04_new_avrgt_25_right_hemisphere.nii'
     json_template_path = '/home/sbednarek/DEV/lsfm_schema/lsfm_image_server/results/metadata/template_25.json'
     seg_path = '/home/sbednarek/DEV/lsfm_schema/lsfm_image_server/results/exp_4/segmentation_in_signal-001-25_deformable.nii.gz'
+    auto_seg_path = '/home/sbednarek/DEV/lsfm_schema/lsfm_image_server/results/exp_4/segmentation_in_structural-001-25_deformable.nii.gz'
+    auto_seg_json ='/home/sbednarek/DEV/lsfm_schema/lsfm_image_server/results/metadata/segementation_in_autofluo_11.json'
     json_seg_path = '/home/sbednarek/DEV/lsfm_schema/lsfm_image_server/results/metadata/segmentation_in_signal_11.json'
     df_forward_path = '/home/sbednarek/DEV/lsfm/resources/deformation_field_test/30_transforms/forward_warp_structural_001.nii.gz'
     df_forward_json_path = '../results/metadata/forward_warp.json'
@@ -2738,7 +2934,8 @@ if __name__ == '__main__':
     #test_chunk_transform_export('../results/exp_4_new.h5')
     #test_auto_chunk_transform_export('../results/exp_4_new.h5')
 
-    #test_chunk_transform_export('/home/sbednarek/DEV/lsfm/results/experimental_4.h5')
+    test_chunk_transform_export('/home/sbednarek/DEV/lsfm_schema/lsfm_image_server/results/exp_4_new.h5',
+                                'fos', output_path='/home/sbednarek/DEV/lsfm_schema/lsfm_image_server/results/exp_4/check_margis_1.nii.gz')
 
     #test_chunk_transform_export('/mnt/nicl/home/pmajka/results/experimental_5.h5',
     #                            output_path='../results/experimental_5/in_cfos_whole_amygdala_native_cfos.nii.gz')
@@ -2756,4 +2953,6 @@ if __name__ == '__main__':
     #                            output_path='../results/control_2/in_cfos_whole_amygdala_native_cfos.nii.gz')
 
 
-    test_slice_export('../results/exp_4_new.h5', 'autofluo', '../results/slices/img_%04d.tif')
+    #test_slice_export('../results/exp_4_new.h5', 'autofluo', '../results/slices/img_%04d.tif')
+
+    #write_seg_to_hdf(auto_seg_path, auto_seg_json, '../results/exp_4_new.h5')
