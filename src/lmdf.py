@@ -580,7 +580,37 @@ class LightMicroscopyHDF(object):
             self._populate_channels()
 
     def __repr__(self):
-        return "\n".join(str(channel) for channel in self.channels.values())
+        metadata = '\n'.join("%s=%r" % (key, val) for (key, val) in self.extended_metadata.iteritems())
+        channel_info = '\n'.join(str(channel) for channel in self.channels.values())
+        return '\n---------\n'.join([metadata, channel_info])
+
+    @property
+    def extended_metadata(self):
+        if PathUtil.get_extended_metadata_path() not in self.h5_file:
+            self.h5_file.create_group(PathUtil.get_extended_metadata_path())
+
+        return self.h5_file[PathUtil.get_extended_metadata_path()].attrs
+
+    @logging_decor
+    def add_metadata(self, m_key, m_value):
+        self.extended_metadata[m_key] = m_value
+        self.h5_file.flush()
+
+    def log_operation(self, cmd_name, cmd_line):
+        if self.h5_file.mode == 'r':
+            logger.info('File in read mode only, cannot log operations!')
+            return
+        log_path = PathUtil.get_log_path(dt.datetime.now(), cmd_name)
+        logger.debug('log path: {:} \n command-name: {:}\n command: {:}'.format(log_path,
+                                                                                cmd_name,
+                                                                                cmd_line))
+        self.h5_file.create_dataset(name=log_path, data=cmd_line)
+
+    def close(self):
+        self.h5_file.close()
+
+    def open(self):
+        self.h5_file = h5py_cache.File(self.file_path, 'a', chunk_cache_mem_size=1024 ** 3, libver='latest')
 
     @property
     def channel_names(self):
@@ -613,6 +643,7 @@ class LightMicroscopyHDF(object):
         """
         return self.channels[_channel_name]
 
+    @logging_decor
     def export_image(self, export_cmd):
         """
 
