@@ -555,16 +555,21 @@ def logging_decor(func):
 
 
 class LightMicroscopyHDF(object):
-    def __init__(self, file_path):
+    def __init__(self, file_path, access_mode='a'):
 
         self.file_path = file_path
         self.channels = dict()
 
         try:
-            self.h5_file = h5py.File(self.file_path, 'a', libver='latest')
-        except IOError:
-            logger.error("File not found or couldn't open file", exc_info=True)
-            raise
+            # self.h5_file = h5py.File(self.file_path, 'a', libver='latest')
+            self.h5_file = h5py_cache.File(self.file_path, access_mode, chunk_cache_mem_size=1024 ** 3, libver='latest')
+        except IOError as e:
+            if e.errno == errno.EACCES:
+                self.h5_file = h5py_cache.File(self.file_path, 'r', chunk_cache_mem_size=1024 ** 3,
+                                               libver='latest')
+            else:
+                logger.error("File not found or couldn't open file", exc_info=True)
+                raise
 
         self.root = self.h5_file['/']
         self.bdv = BigDataViewer(h5_file=self.h5_file)
