@@ -803,7 +803,7 @@ class LightMicroscopyHDF(object):
 
 
 class Affine(object):
-    def __init__(self, affine_path=None):
+    def __init__(self, affine_name, affine_path=None):
         if affine_path is not None:
             try:
                 self.itk_affine = sitk.ReadTransform(affine_path)
@@ -813,6 +813,7 @@ class Affine(object):
                                    "with itk")
             self.nifti_affine = Affine.get_affine_matrix(affine_path)
             self.inv_nifti_affine = np.linalg.inv(self.nifti_affine)
+            self.affine_name = affine_name
 
     def set_affine(self, nifti_affine, itk_params, itk_fixed_params):
         self.nifti_affine = nifti_affine
