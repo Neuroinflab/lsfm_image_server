@@ -529,6 +529,31 @@ class NiftiProxy(ImageProxy):
         return [self.data]
 
 
+def logging_decor(func):
+    def func_wrapper(self, *args, **kwargs):
+        options = dict()
+        options.update(kwargs)
+        args_name = inspect.getargspec(func)[0][1:]
+
+        for i, arg in enumerate(args):
+            if hasattr(arg, '__dict__'):
+                options.update(arg.__dict__)
+            else:
+                options.update({args_name[i]: arg})
+
+        str_options = '\n'.join("%s=%r" % (key, val) for (key, val) in options.iteritems())
+
+        with open('/proc/{}/cmdline'.format(os.getpid())) as c:
+            str_options = '\n'.join([str_options, "cmdline={}".format(' '.join(c.read().split(b'\x00'))
+)])
+
+        str_options = np.string_(str_options)
+        self.log_operation(func.__name__, str_options)
+
+        return func(self, *args, **kwargs)
+    return func_wrapper
+
+
 class LightMicroscopyHDF(object):
     def __init__(self, file_path):
 
