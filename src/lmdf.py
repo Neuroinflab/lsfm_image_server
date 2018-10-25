@@ -3,30 +3,32 @@
 
 import os
 import sys
-import itk
 import json
 import tqdm
 import h5py
+import copy
+import errno
+import imageio
+import inspect
+import h5py_cache
 
 import tifffile as tf
 import numpy as np
 import nibabel as nib
 import SimpleITK as sitk
+import datetime as dt
 
 import dump_metadata as dm
-# import lsfm_info as li
 
 from utils import PathUtil
 from utils import InputImageType
-from utils import ImageComponentType
 from lxml import etree
 from collections import namedtuple
 from scipy.misc import imsave
-from skimage.transform import resize
 
 import logging
 
-logging.basicConfig(level=logging.DEBUG)
+logging.basicConfig(level=logging.ERROR)
 logger = logging.getLogger(__name__)
 
 M_ORIGIN = 'origin'
