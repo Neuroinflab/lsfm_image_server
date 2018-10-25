@@ -651,8 +651,9 @@ class LightMicroscopyHDF(object):
         """
 
         channel = self.get_channel(export_cmd.channel_name)
-        channel.export_image(export_cmd)
+        return channel.export_image(export_cmd)
 
+    @logging_decor
     def export_slices(self, export_slices_cmd):
 
         channel = self.get_channel(export_slices_cmd.channel_name)
@@ -661,6 +662,7 @@ class LightMicroscopyHDF(object):
 
         channel.export_slices(export_slices_cmd)
 
+    @logging_decor
     def write_channel(self, image_proxy, create_bdv=True):
 
         data_sets = []
