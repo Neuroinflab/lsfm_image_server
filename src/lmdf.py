@@ -905,9 +905,131 @@ class Affine(object):
         voxel_sizes = nib.affines.voxel_sizes(affine)
         dir_matrix = affine[:3, :3].copy()
         dir_matrix /= voxel_sizes
-        #dir_matrix *= INVERSE_AFFINE_SIGN[:3, :3]
-        #dir_matrix *= RAS_DIRECTION[:, np.newaxis]
+        # dir_matrix *= INVERSE_AFFINE_SIGN[:3, :3]
+        # dir_matrix *= RAS_DIRECTION[:, np.newaxis]
         return dir_matrix
+
+    def __repr__(self):
+        return "affine: {}".format(self.affine_name)
+
+
+TransposeTuple = namedtuple('TransposeTuple', 'transpose, flip, inv_transpose, inv_flip,'
+                            'ltranspose, lflip, linv_transpose, linv_flip')
+
+
+class ImageExporter(object):
+    def __init__(self, export_cmd, pyramid_level):
+        """
+        :type pyramid_level:
+        :type export_cmd: ExportCmd
+        :param export_cmd:
+        :param pyramid_level:
+        """
+        self.export_cmd = export_cmd
+        self.pyramid_level = pyramid_level
+
+        self.transpose_tuple = TransposeTuple(*self.get_axes_transpose(ndim=len(self.pyramid_level.shape)))
+        self.shape = np.array(pyramid_level.shape)[self.transpose_tuple.transpose]
+        self.origin = np.abs(np.array(pyramid_level.origin[self.transpose_tuple.transpose])) * np.array([1, 1, -1.])
+        self.voxel_size = np.array(pyramid_level.voxel_size[self.transpose_tuple.transpose])
+        self.affine_vp, self.affine_pv = ImageProcessor.get_affines(self.voxel_size,
+                                                                    self.origin)
+        self.ct = CompositeTransform(self.export_cmd.list_of_transforms)
+
+    def get_axes_transpose(self, ndim=3):
+        transpose, flip = np.arange(ndim), np.ones(ndim)
+        inv_transpose, inv_flip = np.arange(ndim), np.ones(ndim)
+        transpose[:3], flip[:3] = ImageProcessor.get_transpose(self.export_cmd.input_orientation)
+        inv_transpose[:3] = np.argsort(transpose[:3])
+        inv_flip[:3] = flip[inv_transpose[:3]] < 0
+
+        return transpose[:3], flip[:3], inv_transpose[:3], inv_flip[:3], transpose, flip, inv_transpose, inv_flip
+
+    def _compute_indices(self):
+
+        self.start_os_mm = self.export_cmd.phys_origin
+        self.chunk_size_in_voxels = (self.export_cmd.phys_size // self.voxel_size).astype(np.int)
+        self.end_os_mm = np.array(self.export_cmd.phys_origin) + \
+                         np.array(self.export_cmd.phys_size) * np.array([1, 1, -1.])
+
+        #self.start_is_mm = self.ct.composite.TransformPoint(self.start_os_mm)
+        self.start_is_mm = np.abs(self.ct.composite.TransformPoint(self.start_os_mm)) * np.array([1, 1, -1.])
+        self.start_index = np.abs(np.around(self.affine_pv.TransformPoint(self.start_is_mm)).astype(np.int))
+
+        self.end_index = self.start_index + self.chunk_size_in_voxels
+        self.start_index = np.array(self.start_index)[self.transpose_tuple.inv_transpose]
+        self.end_index = np.array(self.end_index)[self.transpose_tuple.inv_transpose]
+
+    def _prepare_chunk(self):
+        self.chunk = self.pyramid_level.get_level_chunk_data(self.start_index, self.end_index,
+                                                             self.transpose_tuple.inv_flip)
+
+    def _transpose_chunk(self):
+
+        self.chunk = self.chunk.transpose(self.transpose_tuple.ltranspose)
+        self.chunk = ImageProcessor.reverse_axes(self.chunk, self.transpose_tuple.flip < 0)
+
+    def _resample_chunk(self):
+
+        logger.debug("_resample_chunk START_IS_MM {}".format(self.start_is_mm))
+
+        self.chunk_affine = nib.affines.from_matvec(np.diag(self.voxel_size) * SIGN_RAS_A, self.start_is_mm)
+        self.meta_image = MetaImage(self.chunk, self.chunk_affine,
+                                    self.pyramid_level.pixel_type,
+                                    DIRECTION_RAS,
+                                    self.pyramid_level.is_segmentation,
+                                    self.pyramid_level.is_nifti)
+
+        if self.export_cmd.resample_image:
+            self.scale_factors = self.voxel_size / self.export_cmd.output_resolution
+        else:
+            self.scale_factors = np.array([1., 1., 1.])
+
+        self.meta_image = ImageProcessor.resample_image(self.meta_image, self.scale_factors)
+
+    def _transform_chunk(self):
+
+        self.chunk = ImageProcessor.apply_transformations(self.meta_image, self.ct)
+
+    def process(self):
+        self._compute_indices()
+        self._prepare_chunk()
+        self._transpose_chunk()
+        self._resample_chunk()
+        self._transform_chunk()
+
+        return self.chunk
+
+
+class ImageRegionExporter(ImageExporter):
+
+    def _compute_indices(self):
+        self.start, self.end = ImageProcessor.get_bounding_box(self.export_cmd.segmentation,
+                                                               self.export_cmd.region_id)
+
+        self.start_is_mm = self.export_cmd.segmentation.TransformIndexToPhysicalPoint(self.start)
+        self.end_is_mm = self.export_cmd.segmentation.TransformIndexToPhysicalPoint(self.end)
+        self.start_index = np.abs(np.around(self.affine_pv.TransformPoint(self.start_is_mm)).astype(np.int))
+        self.end_index = np.abs(np.around(self.affine_pv.TransformPoint(self.end_is_mm)).astype(np.int))
+        self.start_index = np.array(self.start_index)[self.transpose_tuple.inv_transpose]
+        self.end_index = np.array(self.end_index)[self.transpose_tuple.inv_transpose]
+
+
+class ImageWholeExporter(ImageExporter):
+
+    def _compute_indices(self):
+        if self.export_cmd.phys_origin is not None:
+            self.start_os_mm = self.export_cmd.phys_origin
+            self.start_is_mm = self.ct.composite.TransformPoint(self.start_os_mm)
+        else:
+            self.start_is_mm = self.origin
+            self.start_os_mm = self.ct.affine_composite.GetInverse().TransformPoint(self.start_is_mm)
+
+        self.start_index = np.abs(np.around(self.affine_pv.TransformPoint(self.start_is_mm)).astype(np.int))
+        self.chunk_size_in_voxels = self.shape
+        self.end_index = self.start_index + self.chunk_size_in_voxels
+        self.start_index = np.array(self.start_index)[self.transpose_tuple.inv_transpose]
+        self.end_index = np.array(self.end_index)[self.transpose_tuple.inv_transpose]
 
 
 class HDFChannel(object):
