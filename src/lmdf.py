@@ -2143,6 +2143,9 @@ class CompositeTransform(object):
 
     @property
     def composite(self):
+        if len(self.transforms) == 0:
+            logger.debug("creating identity transform")
+            return sitk.Transform(sitk.AffineTransform(3))
         self.sort_transforms()
         ct = sitk.Transform(self.transforms[0].transform)
         for transform in self.transforms[1:]:
@@ -2152,6 +2155,9 @@ class CompositeTransform(object):
 
     @property
     def affine_composite(self):
+        if len(self.transforms) == 0:
+            logger.debug("creating identity transform")
+            return sitk.Transform(sitk.AffineTransform(3))
         act = None
         self.sort_transforms()
         for transform in self.transforms:
