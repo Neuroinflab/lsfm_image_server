@@ -2487,8 +2487,21 @@ class ImageProcessor(object):
         return start_point, end_point
 
     @staticmethod
+    def get_affines(voxel_size, origin):
+        affine_voxel_to_physical = sitk.AffineTransform(3)
+        params = tuple(np.hstack([np.diag(voxel_size).ravel(), origin]))
+        affine_voxel_to_physical.SetParameters(params)
+        affine_physical_to_voxel = affine_voxel_to_physical.GetInverse()
+
+        return affine_voxel_to_physical, affine_physical_to_voxel
+
+    @staticmethod
     def create_dummy_image(size, direction, spacing, origin, pixel_id):
         logger.debug("size: {}".format(size))
+        logger.debug("direction: {}".format(direction))
+        logger.debug("spacing: {}".format(spacing))
+        logger.debug("origin: {}".format(origin))
+        logger.debug("pixel_id: {}".format(pixel_id))
         img = sitk.Image(int(size[0]), int(size[1]), int(size[2]), int(pixel_id))
         img.SetDirection(direction)
         img.SetSpacing(spacing)
@@ -2549,6 +2562,7 @@ class ImageProcessor(object):
         :param reg_id: unit16 indicating designated region
         :param img: sitk.Image
         :param labels: sitk.Image of segmentation
+        :param margin:
         :return: sitk.Image
         """
 
