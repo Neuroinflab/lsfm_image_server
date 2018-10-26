@@ -1076,7 +1076,7 @@ class HDFChannel(object):
             p_level.pixel_type = self.pixel_type
             p_level.is_segmentation = self.is_segmentation
             p_level.is_multichannel = self.is_multichannel
-            p_level.is_nifti = self.is_multichannel or self.is_segmentation #TODO
+            p_level.is_nifti = self.is_multichannel or self.is_segmentation
             p_level.path = self._get_image_data_path(i_level)
             p_level.origin = self.p_origins[i_level]
             p_level.shape = self.p_shapes[i_level]
@@ -1407,7 +1407,7 @@ class HDFChannel(object):
 
             target_size = cmd.ref_channel.pyramid_levels[cmd.ref_level].shape[transpose]
             logger.debug("target size: {}".format(target_size))
-           #source_size = self.shape[transpose]
+            # source_size = self.shape[transpose]
             logger.debug("source image size: {}".format(self.shape))
 
             cmd_tmp = ExportCmd(None, None, None, 'RAS', 0, [], None, None, None, None)
@@ -2005,6 +2005,7 @@ class HDFChannel(object):
                     #                 self.pixel_type, DIRECTION_LPI, self.is_segmentation)
 
         def __repr__(self):
+
             return "\nLevel : {}" \
                    "\nLevel shape:      {: <7} {: <7} {: <7}" \
                    "\nLevel spacing:    {:.5f} {:.5f} {:.5f}" \
@@ -2465,7 +2466,6 @@ class MetaMultiChannelImage(MetaImage):
 
 
 class ImageProcessor(object):
-
     @staticmethod
     def reverse_axes(data, reverse=[False, False, False]):
         if reverse[0]:
@@ -2825,7 +2825,7 @@ class ImageProcessor(object):
         resampler.SetOutputSpacing(input_data.GetSpacing())
         resampler.SetOutputOrigin(ref_data.GetOrigin())
 
-        #resampler.SetReferenceImage(ref_data)
+        # resampler.SetReferenceImage(ref_data)
 
         output_data = resampler.Execute(input_data)
         logger.debug("Output origin: {}".format(output_data.GetOrigin()))
