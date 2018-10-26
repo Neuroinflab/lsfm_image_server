@@ -1087,9 +1087,20 @@ class HDFChannel(object):
 
             self.pyramid_levels.append(p_level)
 
+    def log_operation(self, cmd_name, cmd_line):
+        if self.h5_file.mode == 'r':
+            logger.info('File in read mode only, cannot log operations!')
+            return
+        log_path = PathUtil.get_log_path(dt.datetime.now(), cmd_name)
+        logger.debug('log path: {:} \n command-name: {:}\n command: {:}'.format(log_path,
+                                                                                cmd_name,
+                                                                                cmd_line))
+        self.h5_file.create_dataset(name=log_path, data=cmd_line)
+
+    @logging_decor
     def write_affine(self, affine_name, affine_file_path):
         # type: (str, str) -> None
-        affine = Affine(affine_path=affine_file_path)
+        affine = Affine(affine_path=affine_file_path, affine_name=affine_name)
         affine_path = PathUtil.get_lsfm_affine_path(self.channel_name, affine_name)
         affine_itk_path = PathUtil.get_lsfm_affine_itk_path(self.channel_name, affine_name)
 
