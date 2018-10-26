@@ -2025,16 +2025,21 @@ class HDFChannel(object):
 
 
 class ExportSlicesCmd(object):
-    def __init__(self, channel_name, output_path, input_orientation,
-                 input_resolution_level, slicing_range, axis, extract_roi,
+    def __init__(self, channel_name, input_orientation, input_resolution_level, axis,
+                 output_path=None, extract_roi=None, slicing_range=None,
                  ref_channel=None, ref_level=None, ref_orientation=None):
+
+        if slicing_range is None:
+            slicing_range = [None, None, 1]
         if extract_roi is None:
             extract_roi = [None, None, None, None]
 
         self.axis = axis
         self.channel_name = channel_name
         self.start, self.stop, self.step = np.array(slicing_range)
-        self.output_path, self.output_ext = os.path.splitext(output_path)
+        self.output_path = output_path
+        if self.output_path:
+            self.output_path, self.output_ext = os.path.splitext(output_path)
         self.roi_ox, self.roi_oy, self.roi_sx, self.roi_sy = np.array(extract_roi)
         self.ref_channel = ref_channel
         self.ref_level = ref_level
