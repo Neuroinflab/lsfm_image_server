@@ -1118,7 +1118,7 @@ class HDFChannel(object):
         :type affine_name: str
         :rtype :Affine
         """
-        affine = Affine()
+        affine = Affine(affine_name=affine_name)
         affine_path = PathUtil.get_lsfm_affine_path(self.channel_name, affine_name)
         affine_itk_path = PathUtil.get_lsfm_affine_itk_path(self.channel_name, affine_name)
 
