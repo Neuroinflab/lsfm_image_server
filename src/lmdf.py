@@ -3107,7 +3107,7 @@ class BigDataViewer(object):
 
         :rtype: tuple of two numpy arrays with subsampling factors and chunk sizes"""
 
-        LOWEST_RES = 128
+        '''LOWEST_RES = 128
         subdiv_16_16_16 = np.array([16, 16, 16])
         subdiv_32_32_4 = np.array([[4, 32, 32],
                                    [32, 4, 32],
@@ -3116,7 +3116,19 @@ class BigDataViewer(object):
         subdiv_128_128_128 = np.array([128, 128, 128])
         subdiv_256_256_32 = np.array([[32, 256, 256],
                                       [256, 32, 256],
+                                      [256, 256, 32]])'''
+
+        LOWEST_RES = 256
+        subdiv_16_16_16 = np.array([16, 16, 16])
+        subdiv_32_32_4 = np.array([[4, 32, 32],
+                                   [32, 4, 32],
+                                   [32, 32, 4]])
+
+        subdiv_128_128_128 = np.array([256, 256, 256])
+        subdiv_256_256_32 = np.array([[32, 256, 256],
+                                      [256, 32, 256],
                                       [256, 256, 32]])
+
         resolutions = []
         subdivisions = []
 
@@ -3134,12 +3146,12 @@ class BigDataViewer(object):
             logger.debug("Voxel scale: {}".format(voxel_scale))
 
             if (4 * vscale_max / 32.) > (1. / vscale_max):
-                if shape_min > 128:
+                if shape_min > LOWEST_RES:
                     subdivisions.append(subdiv_256_256_32[voxel_scale.argmax()])
                 else:
                     subdivisions.append(subdiv_32_32_4[voxel_scale.argmax()])
             else:
-                if shape_min > 128:
+                if shape_min > LOWEST_RES:
                     subdivisions.append(subdiv_128_128_128)
                 else:
                     subdivisions.append(subdiv_16_16_16)
