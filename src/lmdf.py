@@ -1584,16 +1584,23 @@ class HDFChannel(object):
             logger.debug("sly: {}".format(sly))
             logger.debug("slz: {}".format(slz))
 
-            expected_shape = np.array([slx.stop - slx.start,
-                                       sly.stop - sly.start,
-                                       slz.stop - slz.start])
+            expected_shape = end_idx - start_idx
 
+            '''expected_shape = np.array([slx.stop - slx.start,
+                                       sly.stop - sly.start,
+                                       slz.stop - slz.start])'''
+
+            '''expected_shape = np.array([len(xrange(*slx.indices(max(self.shape[0], slx.stop)))),
+                                       len(xrange(*sly.indices(max(self.shape[1], sly.stop)))),
+                                       len(xrange(*slz.indices(max(self.shape[2], sly.stop))))])'''
+
+            logger.debug("Pyramid level shape: {}".format(self.shape))
             logger.debug("Expected chunk shape from source: {}".format(expected_shape))
 
             data = self.h5_file[self.path][slx, sly, slz]
             logger.debug("actual shape of data: {}".format(data.shape))
 
-            shape_difference = expected_shape - data.shape
+            shape_difference = expected_shape - data.shape[:3]
             logger.debug("Difference in shape: {}".format(shape_difference))
 
             data_slx = self.get_slice(0, data.shape[0])
@@ -1601,30 +1608,44 @@ class HDFChannel(object):
             data_slz = self.get_slice(0, data.shape[2])
 
             if np.abs(slx.start) > self.shape[0]:
-                data_slx = self.get_slice(-data.shape[0]-1, -1)
+                data_slx = self.get_slice(0, data.shape[0], flip=True)
             if np.abs(sly.start) > self.shape[1]:
-                data_sly = self.get_slice(-data.shape[1]-1, -1)
+                data_sly = self.get_slice(0, data.shape[1], flip=True)
             if np.abs(slz.start) > self.shape[2]:
-                data_slz = self.get_slice(-data.shape[2]-1, -1)
+                data_slz = self.get_slice(0, data.shape[2], flip=True)
 
+            n_dims = data.ndim - 3
+            proper_shape = tuple(expected_shape) + (data.shape[-n_dims:]) if n_dims else tuple(expected_shape)
+            logger.debug("proper chunk shape: {}".format(proper_shape))
+            proper_chunk = np.zeros(proper_shape, dtype=data.dtype)
 
-            '''
-            data = self.h5_file[self.path][slx, sly, slz]
-
-            return data'''
-            # returned trasformed data
-
-            proper_chunk = np.zeros(expected_shape, dtype=data.dtype)
-
-            # TODO: add direction dependence for the artificial margin
-
-            #proper_chunk[:data.shape[0], :data.shape[1], :data.shape[2]] = data
-            proper_chunk[data_slx, data_sly, data_slz] = data
+            # proper_chunk[:data.shape[0], :data.shape[1], :data.shape[2]] = data
+            logger.debug("data_slx: {}".format(data_slx))
+            logger.debug("data_sly: {}".format(data_sly))
+            logger.debug("data_slz: {}".format(data_slz))
+            proper_chunk[data_slx, data_sly, data_slz, ...] = data
 
             return proper_chunk
 
-
         def get_meta_image(self, export_cmd):
+
+            if export_cmd.whole_image:
+                img_exp = ImageWholeExporter(export_cmd, self)
+            else:
+                if export_cmd.export_region:
+                    img_exp = ImageRegionExporter(export_cmd, self)
+                else:
+                    img_exp = ImageExporter(export_cmd, self)
+
+            output_img = img_exp.process()
+
+            if export_cmd.output_path:
+                sitk.WriteImage(output_img, export_cmd.output_path)
+                return True
+            else:
+                return output_img
+
+        def old_get_meta_image(self, export_cmd):
             """
 
             :type export_cmd: ExportCmd
