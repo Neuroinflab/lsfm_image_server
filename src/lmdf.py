@@ -2058,13 +2058,19 @@ class ExportSlicesCmd(object):
 class ExportCmd(object):
     def __init__(self, channel_name, output_path, output_resolution, input_orientation,
                  input_resolution_level, list_of_transforms, phys_origin, phys_size,
-                 segmentation_name, region_id):
-        # type: (str, str, list, str, int, list, list, list) -> ExportCmd
+                 segmentation_name, region_id, grid_size, overlap_mm):
+        # type: (str, str, list, str, int, list, list, list) -> None
 
         self.channel_name = channel_name
         self.output_path = output_path
+        if self.output_path is not None:
+            if not os.path.exists(os.path.dirname(self.output_path)):
+                os.makedirs(os.path.dirname(self.output_path))
+
         self.output_resolution = output_resolution
-        if output_resolution is not None:
+        if output_resolution:
+            if len(output_resolution) != 3:
+                raise ValueError("Wrong shape of output resolution array")
             self.output_resolution = np.array(output_resolution, np.float64)
         self.input_orientation = input_orientation
         self.input_resolution_level = input_resolution_level
@@ -2080,9 +2086,23 @@ class ExportCmd(object):
         self.region_id = region_id
         self.segmentation = None
 
+        self.grid_size = grid_size
+        if grid_size is not None:
+            self.grid_size = np.array(grid_size, dtype=np.int32)
+
+        self.overlap_mm = overlap_mm
+
+    @property
+    def grid_of_chunks(self):
+        if self.grid_size is not None and self.overlap_mm is not None:
+            return True
+        else:
+            return False
+
     @property
     def whole_image(self):
-        if self.phys_origin is None and self.phys_size is None:
+        # if self.phys_origin is None and self.phys_size is None and not self.export_region:
+        if self.phys_size is None and not self.export_region:
             return True
         else:
             return False
