@@ -2604,24 +2604,65 @@ class ImageProcessor(object):
         return offset
 
     @staticmethod
-    def apply_transformations(meta_image, meta_ref_image, composite_transform):
+    def get_size_origin(img, transform, spacing):
+        """
+        Recompute the size and origin for image transformation.
+        For RAS orientation only.
 
-        #input_image = sitk.ReadImage('../results/exp_4/001_10_mm.nii.gz')
+        :type img: sitk.Image
+        :type transform: sitk.Transform
+        :type spacing: np.array
+        :param img: input image for transformation
+        :param transform: itk (affine) transform
+        :param spacing: spacing of the output image
+        :return:
+        """
+        size = img.GetSize()
+        # find all corners of an image in coordinate space
+        index = []
+        for i in xrange(8):
+            for j in xrange(3):
+                if (i >> j) % 2:
+                    index.append(size[j] - 1)
+                else:
+                    index.append(0)
+
+        index = np.array(index)
+        index = index.reshape(-1, 3)
+
+        # find all corners of the image in physical output space
+        points = []
+        corners = []
+        for p in index:
+            point = img.TransformIndexToPhysicalPoint(p)
+            points.append(point)
+            corners.append(transform.TransformPoint(point))
+
+        _max = np.ones(3) * np.finfo(np.float32).min
+        _min = np.ones(3) * np.finfo(np.float32).max
+
+        for c in corners:
+            for j in xrange(3):
+                _min[j] = c[j] if c[j] < _min[j] else _min[j]
+                _max[j] = c[j] if c[j] > _max[j] else _max[j]
+
+        new_size = np.round(((_max - _min) / spacing) + 1)
+        _min[2] = _max[2]  # RAS direction
+        new_origin = _min
+
+        return new_size, new_origin
+
+    @staticmethod
+    def apply_transformations(meta_image, composite_transform):
+
         input_image = meta_image.get_sitk_image()
-        #sitk.WriteImage(input_image, '../results/exp_4/chunk_to_transform.nii.gz')
-        #output_origin = composite_transform.composite.TransformPoint(input_image.GetOrigin())
-        output_origin = composite_transform.affine_composite.GetInverse().TransformPoint(input_image.GetOrigin())
-
-        #output_origin = composite_transform.composite.GetInverse().TransformPoint(input_image.GetOrigin())
-        #output_origin = np.array(output_origin) * np.array([-1, -1, 1])
-
-        output_size = np.array(input_image.GetSize()) #+ 2 * np.abs(np.round(output_origin / np.array(input_image.GetSpacing())))
+        output_size, output_origin = ImageProcessor.get_size_origin(input_image,
+                                                                    composite_transform.affine_composite.GetInverse(),
+                                                                    np.array(input_image.GetSpacing()))
 
         logger.debug("output_size: {}".format(output_size))
+        logger.debug("output_origin: {}".format(output_origin))
         logger.debug("input spacing: {}".format(input_image.GetSpacing()))
-
-        #
-        #ref_image = sitk.ReadImage('../results/exp_4/template_both_hemispheres_mm.nii.gz')
 
         resampler = sitk.ResampleImageFilter()
         resampler.SetInterpolator(sitk.sitkLinear)
@@ -2632,13 +2673,116 @@ class ImageProcessor(object):
         resampler.SetSize(map(int, output_size))
         resampler.SetOutputDirection(input_image.GetDirection())
 
-
-        #resampler.SetReferenceImage(ref_image)
+        # resampler.SetReferenceImage(ref_image)
         resampler.SetTransform(composite_transform.composite)
 
         out = resampler.Execute(input_image)
-        #sitk.WriteImage(out, '../results/exp_4/test_from_inner_data.nii.gz')
+        # sitk.WriteImage(out, '../results/exp_4/test_from_inner_data.nii.gz')
         return out
+
+
+    '''@staticmethod
+    def apply_transformations(meta_image, meta_ref_image, composite_transform):
+
+        # input_image = sitk.ReadImage('../results/exp_4/001_10_mm.nii.gz')
+        input_image = meta_image.get_sitk_image()
+        # sitk.WriteImage(input_image, '../results/exp_4/chunk_to_transform.nii.gz')
+        # output_origin = composite_transform.composite.TransformPoint(input_image.GetOrigin())
+        output_origin = composite_transform.affine_composite.GetInverse().TransformPoint(input_image.GetOrigin())
+
+        # output_origin = composite_transform.composite.GetInverse().TransformPoint(input_image.GetOrigin())
+        # output_origin = np.array(output_origin) * np.array([-1, -1, 1])
+
+        output_size = np.array(
+            input_image.GetSize())  # + 2 * np.abs(np.round(output_origin / np.array(input_image.GetSpacing())))
+
+        logger.debug("output_size: {}".format(output_size))
+        logger.debug("input spacing: {}".format(input_image.GetSpacing()))
+
+        #
+        # ref_image = sitk.ReadImage('../results/exp_4/template_both_hemispheres_mm.nii.gz')
+
+        resampler = sitk.ResampleImageFilter()
+        resampler.SetInterpolator(sitk.sitkLinear)
+        resampler.SetDefaultPixelValue(0)
+
+        resampler.SetOutputOrigin(output_origin)
+        resampler.SetOutputSpacing(input_image.GetSpacing())
+        resampler.SetSize(map(int, output_size))
+        resampler.SetOutputDirection(input_image.GetDirection())
+
+        # resampler.SetReferenceImage(ref_image)
+        resampler.SetTransform(composite_transform.composite)
+
+        out = resampler.Execute(input_image)
+        # sitk.WriteImage(out, '../results/exp_4/test_from_inner_data.nii.gz')
+        return out'''
+
+    @staticmethod
+    def apply_transformations_with_reference(meta_image, meta_ref_image, composite_transform):
+
+        """
+        :type meta_image: MetaImage
+        :type meta_ref_image: MetaImage
+        :type composite_transform: CompositeTransform
+        """
+
+        input_data = meta_image.get_sitk_image()
+        logger.debug("Input origin: {}".format(input_data.GetOrigin()))
+
+        ref_data = meta_ref_image.get_sitk_image()
+        logger.debug("Ref origin: {}".format(ref_data.GetOrigin()))
+
+        affine_composite = composite_transform.affine_composite
+        if affine_composite is not None:
+            out_direction = tuple(Affine.get_direction_matrix_from_itk_affine(affine_composite.GetInverse()).flatten())
+            logger.debug("Output direction: {}".format(out_direction))
+        else:
+            out_origin = input_data.GetOrigin()
+            out_direction = input_data.GetDirection()
+
+
+        # figure out output origin based on ref image and scale factors
+        input_offset = ImageProcessor.compute_offset(ref_data, meta_ref_image.voxel_size)
+        output_offset = ImageProcessor.compute_offset(input_data, input_data.GetSpacing())
+
+        output_origin = meta_ref_image.origin - input_offset + output_offset
+        output_origin = np.diag(output_origin)
+
+        logger.debug('OUTPUT ORIGIN BASED ON REF IMAGE AND RESCALING: {}'.format(output_origin))
+
+        output_origin = composite_transform.affine_composite.GetInverse().TransformPoint(input_data.GetOrigin())
+        logger.debug('OUTPUT ORIGIN BASED ON AFFINE TRASNFORM OF INPUT ORIGIN: {}'.format(output_origin))
+        # end figure out
+
+        scale_factors = np.array(ref_data.GetSpacing()) / np.array(input_data.GetSpacing())
+        logger.debug("Scale factors from ref image: {}".format(scale_factors))
+
+        # resample ref image
+        resampled_ref_image = ImageProcessor.resample_image(meta_ref_image, 1./scale_factors)
+        output_origin = resampled_ref_image.get_sitk_image().GetOrigin()
+        logger.debug('OUTPUT ORIGIN BASED ON RESAMPLED REF IMAGE: {}'.format(output_origin))
+        # end resample ref image
+
+        output_size = np.int16(np.floor(np.array(ref_data.GetSize()) * scale_factors))
+
+        logger.debug("Size from ref image: {}".format(output_size))
+
+        resampler = sitk.ResampleImageFilter()
+        resampler.SetInterpolator(meta_image.sitk_data.interpolation_type)
+        resampler.SetDefaultPixelValue(0)
+        resampler.SetTransform(composite_transform.composite)
+        resampler.SetSize((map(int, output_size)))
+        resampler.SetOutputDirection(input_data.GetDirection())
+        resampler.SetOutputSpacing(input_data.GetSpacing())
+        resampler.SetOutputOrigin(output_origin)
+
+        # resampler.SetReferenceImage(ref_data)
+
+        output_data = resampler.Execute(input_data)
+        logger.debug("Output origin: {}".format(output_data.GetOrigin()))
+
+        return output_data
 
     @staticmethod
     def old_apply_transformations(meta_image, meta_ref_image, composite_transform):
