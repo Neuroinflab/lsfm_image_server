@@ -1129,87 +1129,184 @@ class HDFChannel(object):
         except RuntimeError:
             logger.error("Affine {} not found!".format(affine_name))
             raise
+        except KeyError:
+            logger.error("Affine {} not found!".format(affine_name))
+            sys.exit()
 
         affine.set_affine(affine_nifti, affine_itk_params, affine_itk_fixed_params)
         return affine
 
     def read_displacement_field(self, df_name):
-        df_channel = HDFChannel(self.h5_file, df_name)
+        try:
+            df_channel = HDFChannel(self.h5_file, df_name)
+        except ValueError:
+            logger.error("Displacement Field {} not found!".format(df_name))
+            sys.exit()
+
         df_level = df_channel.pyramid_levels[0]
-        cmd = ExportCmd(None, None, None, 'RAS', 0, [], None, None, None, None)
-        df_meta_image = df_level.get_meta_image(cmd)
-        df = df_meta_image.get_sitk_image()
+        cmd = ExportCmd(None, None, None, 'RAS', 0, [], None, None, None, None, None, None)
+        #df_meta_image = df_level.get_meta_image(cmd)
+        #df = df_meta_image.get_sitk_image()
+        df = df_level.get_meta_image(cmd)
         df = sitk.Cast(df, sitk.sitkVectorFloat64)
         # sitk.WriteImage(df, '../results/exp_4/inner_df.nii.gz')
         dft = sitk.DisplacementFieldTransform(df)
         return dft
 
     def read_segmentation(self, seg_name):
-        seg_channel = HDFChannel(self.h5_file, seg_name)
+        try:
+            seg_channel = HDFChannel(self.h5_file, seg_name)
+        except ValueError:
+            logger.error("Segmentation {} not found!".format(seg_name))
+            sys.exit()
+
         seg_level = seg_channel.pyramid_levels[0]
-        cmd = ExportCmd(None, None, None, 'RAS', 0, [], None, None, None, None)
-        seg_meta_image = seg_level.get_meta_image(cmd)
-        seg = seg_meta_image.get_sitk_image()
+        cmd = ExportCmd(None, None, None, 'RAS', 0, [], None, None, None, None, None, None)
+        #seg_meta_image = seg_level.get_meta_image(cmd)
+        #seg = seg_meta_image.get_sitk_image()
+        seg = seg_level.get_meta_image(cmd)
         seg = sitk.Cast(seg, sitk.sitkInt16)
         return seg
 
-    def export_slices(self, cmd):
+    def read_ref_channel(self, ref_name):
+        try:
+            ref_channel = HDFChannel(self.h5_file, ref_name)
+        except ValueError:
+            logger.error("Reference channel {} not found!".format(ref_name))
+            sys.exit()
 
+        ref_channel_level = ref_channel.pyramid_levels[0]
+        ref_channel_level.is_nifti = True
+        cmd = ExportCmd(None, None, None, 'RAS', 0, [], None, None, None, None, None, None)
+        ref_meta_image = ref_channel_level.get_meta_image(cmd)
+        return ref_meta_image
+
+    def export_slices(self, cmd):
         """
 
         :type cmd: ExportSlicesCmd
-        :type ref_channel: HDFChannel
         """
         if not cmd.resample:
-            self.pyramid_levels[cmd.input_resolution_level].get_slices(cmd)
+            return self.pyramid_levels[cmd.input_resolution_level].get_slices(cmd)
 
         else:
-            self.pyramid_levels[cmd.input_resolution_level].get_resampled_slices(cmd)
+            raise NotImplementedError
 
+    def process_transforms(self, list_of_transforms):
+        transforms = []
+        for transform_tuple in list_of_transforms:
+            if transform_tuple.type == 'affine':
+                affine = self.read_affine(transform_tuple.name)
+                if transform_tuple.invert:
+                    affine = affine.itk_inv_affine
+                else:
+                    affine = affine.itk_affine
+                transform = Transform(transform_tuple.type, transform_tuple.order,
+                                      transform_tuple.name, affine)
+                transforms.append(transform)
+            elif transform_tuple.type == 'df':
+                df = self.read_displacement_field(transform_tuple.name)
+                transform = Transform(transform_tuple.type, transform_tuple.order,
+                                      transform_tuple.name, df)
+                transforms.append(transform)
+            else:
+                raise NotImplementedError("Wrong transformation type")
+
+        return transforms
+
+    def export_grid_of_chunks(self, export_cmd, level):
+        """
+
+        :param export_cmd:
+        :param level:
+        :return:
+        """
+        def get_whole_image_grid():
+            logger.debug("Exporting whole image as chunks")
+            transpose, flip = ImageProcessor.get_transpose(export_cmd.input_orientation)
+            whole_phys_size = self.pyramid_levels[level].physical_size[transpose]
+            grid_size = np.ceil(whole_phys_size / (export_cmd.phys_size - export_cmd.overlap_mm))
+            grid_size = grid_size.astype(np.int32)
+            phys_origin = np.abs(np.array(self.pyramid_levels[level].origin)[transpose]) * [1., 1., -1.]
+            logger.debug("transpose for grid size determination: {}".format(transpose))
+            logger.debug("grid size: {}".format(grid_size))
+            logger.debug('phys origin: {}'.format(phys_origin))
+            return phys_origin, grid_size
+
+        def get_physical_coordinates():
+            rows, cols, sls = np.indices([n_x, n_y, n_z])
+            grid_indices = np.vstack([rows.flatten(), cols.flatten(), sls.flatten()]).T
+            phys_affine = np.diag((np.array(export_cmd.phys_size) - export_cmd.overlap_mm) * [1., 1., -1.])
+            phys_coords = np.apply_along_axis(lambda x: np.dot(phys_affine, x), 1, grid_indices)
+            phys_coords += phys_origin
+            return grid_indices, phys_coords
+
+        def get_chunk_cmd():
+            export_chunk_cmd = copy.copy(export_cmd)
+            export_chunk_cmd.segmentation_name = None
+            export_chunk_cmd.region_id = None
+            export_chunk_cmd.grid_size = None
+            export_chunk_cmd.overlap_mm = None
+            return export_chunk_cmd
+
+        def export_chunk(i, origin):
+            logger.debug("chunk with index {} at origin {}".format(grid_indices[i], origin))
+            if export_cmd.output_path:
+                export_chunk_cmd.output_path = export_cmd.output_path + "_{}_{}_{}.nii.gz".format(
+                    grid_indices[i][0],
+                    grid_indices[i][1],
+                    grid_indices[i][2])
+            else:
+                export_chunk_cmd.output_path = None
+
+            export_chunk_cmd.phys_origin = origin
+            return self.pyramid_levels[level].get_meta_image(export_chunk_cmd)
+
+        logger.debug("Exporting grid of chunks")
+        if np.all(export_cmd.grid_size == [0, 0, 0]):
+            phys_origin, grid_size = get_whole_image_grid()
+            n_x, n_y, n_z = grid_size
+            logger.debug("will export whole image as chunks")
+        else:
+            n_x, n_y, n_z = export_cmd.grid_size
+            phys_origin = export_cmd.phys_origin
+
+        grid_indices, phys_coords = get_physical_coordinates()
+        export_chunk_cmd = get_chunk_cmd()
+
+        if export_cmd.output_path:
+            for i, origin in enumerate(phys_coords):
+                export_chunk(i, origin)
+            sys.exit()
+        else:
+            logger.debug("Returning bunch of objects")
+            return (export_chunk(i, origin) for (i, origin) in enumerate(phys_coords))
 
     def export_image(self, export_cmd):
         """
+        Export a subset of image volume based on ExportCommand object.
 
         :type export_cmd: ExportCmd
         """
 
         if export_cmd.list_of_transforms:
-            transforms = []
-            for transform_tuple in export_cmd.list_of_transforms:
-                if transform_tuple.type == 'affine':
-                    affine = self.read_affine(transform_tuple.name)
-                    if transform_tuple.invert:
-                        affine = affine.itk_inv_affine
-                    else:
-                        affine = affine.itk_affine
-                    transform = Transform(transform_tuple.type, transform_tuple.order,
-                                          transform_tuple.name, affine)
-                    transforms.append(transform)
-                elif transform_tuple.type == 'df':
-                    df = self.read_displacement_field(transform_tuple.name)
-                    transform = Transform(transform_tuple.type, transform_tuple.order,
-                                          transform_tuple.name, df)
-                    transforms.append(transform)
-                else:
-                    raise NotImplementedError("Wrong transformation type")
-            export_cmd.list_of_transforms = transforms
+            export_cmd.list_of_transforms = self.process_transforms(export_cmd.list_of_transforms)
 
         if export_cmd.input_resolution_level is None:
             level = self.find_suitable_spacing_level(export_cmd.output_resolution)
         else:
+            if export_cmd.input_resolution_level not in np.arange(self.n_levels):
+                raise ValueError("Error: wrong resolution level value")
             level = export_cmd.input_resolution_level
 
         if export_cmd.export_region:
             segmentation = self.read_segmentation(export_cmd.segmentation_name)
             export_cmd.segmentation = segmentation
-        self.pyramid_levels[level].get_meta_image(export_cmd)  # .save_nifti(export_cmd.output_path)
 
-        '''if export_cmd.export_region:
-            segmentation = self.read_segmentation(export_cmd.segmentation_name)
-            region = ImageProcessor.extract_labeled_region(export_cmd.region_id,
-                                                           img,
-                                                           segmentation)
-            sitk.WriteImage(region, export_cmd.output_path)'''
+        if export_cmd.grid_of_chunks:
+            return self.export_grid_of_chunks(export_cmd, level)
+
+        return self.pyramid_levels[level].get_meta_image(export_cmd)  # .save_nifti(export_cmd.output_path)
 
     def find_suitable_spacing_level(self, resolution):
         if resolution is None:
