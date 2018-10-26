@@ -3289,9 +3289,12 @@ def test_lmdhf(image_path, json_path, hdf_path, multichannel=False):
     meta.update(json_meta)
 
     # ip = NiftiProxy('autofluo', 'exp2', None, meta, None)
-    #ip = ImageProxy.get_image_proxy_class(meta)('cfos2', 'mysz', None, meta, 'single_DIR.xml', None)
-    ip = ImageProxy.get_image_proxy_class(meta)('fos', 'exp_4', 'Z%06d.tif', meta, 'exp4.xml', 4.,
-                                               is_multichannel=multichannel)
+    # ip = ImageProxy.get_image_proxy_class(meta)('cfos2', 'mysz', None, meta, 'single_DIR.xml', None)
+    # ip = ImageProxy.get_image_proxy_class(meta)('cfos', 'mysz', 'Z%06d.tif', meta, 'check_roi_bigger.xml', 4.,
+    #                                           is_multichannel=multichannel)
+
+    ip = ImageProxy.get_image_proxy_class(meta)('cfos', 'mysz', None, meta, 'check_roi_bigger.xml', 4.,
+                                                is_multichannel=multichannel)
     # ip = StreamableOMEProxy('cfos', 'fos_4', None, meta, 1)
 
     lm_test = LightMicroscopyHDF(hdf_path)
@@ -3317,7 +3320,6 @@ def test_export(hdf_path):
 
 
 def write_cfos_affine(hdf_path):
-
     lmf = LightMicroscopyHDF(hdf_path)
     channel = lmf.get_channel('right_template')
     channel.write_affine('auto_to_template',
@@ -3326,7 +3328,6 @@ def write_cfos_affine(hdf_path):
 
 def test_cfos_export(hdf_path):
     lmf = LightMicroscopyHDF(hdf_path)
-
 
     list_of_transforms = [TransformTuple(0, 'new_auto_to_template', 'affine', True)]
     e_cmd = ExportCmd(channel_name='autofluo', output_path='../results/_cfos_15um.nii.gz',
@@ -3339,7 +3340,6 @@ def test_cfos_export(hdf_path):
 
 
 def test_cfos_add_displacement_field(image_path, json_path, hdf_path):
-
     lmf = LightMicroscopyHDF(hdf_path)
 
     meta = dm.ImageMetaData(image_path)
@@ -3413,7 +3413,7 @@ def test_template_export(hdf_path):
                       input_orientation='RAS', input_resolution_level=1,
                       list_of_transforms=list_of_transforms,
                       phys_origin=None, phys_size=None)
-    #lmf.export_image(e_cmd)
+    # lmf.export_image(e_cmd)
 
     e_cmd = ExportCmd(channel_name='right_template', output_path='../results/template_40um.nii.gz',
                       output_resolution=[0.04, 0.04, 0.04],
@@ -3428,11 +3428,10 @@ def test_template_export(hdf_path):
                       list_of_transforms=list_of_transforms,
                       phys_origin=None, phys_size=None)
 
-    #lmf.export_image(e_cmd)
+    # lmf.export_image(e_cmd)
 
 
 def write_exp4_affine(hdf_path):
-
     lmf = LightMicroscopyHDF(hdf_path)
     channel = lmf.get_channel('cfos')
     channel.write_affine('cfos_to_auto',
@@ -3447,7 +3446,6 @@ def write_transforms_signal(hdf_path, channel_name, dir_path,
                             inverse_warp_json='inverse_warp.json',
                             signal_to_structural='structure_001_to_signal_001_physical_affine.txt',
                             signal_to_template='template_right_physical_to_signal_001_Affine.txt'):
-
     lmf = LightMicroscopyHDF(hdf_path)
     channel = lmf.get_channel(channel_name)
 
@@ -3470,7 +3468,6 @@ def write_transforms_signal(hdf_path, channel_name, dir_path,
 
 
 def add_displacement_field(image_path, json_path, hdf_path):
-
     lmf = LightMicroscopyHDF(hdf_path)
 
     meta = dm.ImageMetaData(image_path)
@@ -3487,7 +3484,7 @@ def add_displacement_field(image_path, json_path, hdf_path):
 def test_exp4_export(hdf_path):
     lmf = LightMicroscopyHDF(hdf_path)
 
-    #list_of_transforms = [TransformTuple(0, 'auto_to_template', 'affine', True)]
+    # list_of_transforms = [TransformTuple(0, 'auto_to_template', 'affine', True)]
     list_of_transforms = [TransformTuple(0, 'inverse_warp_template', 'df', True),
                           TransformTuple(1, 'auto_to_template', 'affine', True)]
     e_cmd = ExportCmd(channel_name='autofluo', output_path='../results/exp_4/exp4_10um_affine_df_ref.nii.gz',
@@ -3502,7 +3499,7 @@ def test_exp4_export(hdf_path):
 def test_exp4_cfos_export(hdf_path):
     lmf = LightMicroscopyHDF(hdf_path)
 
-    #list_of_transforms = [TransformTuple(0, 'auto_to_template', 'affine', True)]
+    # list_of_transforms = [TransformTuple(0, 'auto_to_template', 'affine', True)]
     list_of_transforms = [TransformTuple(0, 'cfos_to_auto', 'affine', True),
                           TransformTuple(1, 'inverse_warp_template', 'df', True),
                           TransformTuple(2, 'cfos_to_template', 'affine', True)]
@@ -3511,6 +3508,22 @@ def test_exp4_cfos_export(hdf_path):
                       input_orientation='PSR', input_resolution_level=None,
                       list_of_transforms=list_of_transforms,
                       phys_origin=None, phys_size=None)
+
+    lmf.export_image(e_cmd)
+
+
+def test_export():
+    lmf = LightMicroscopyHDF('/home/sbednarek/DEV/lsfm_schema/lsfm_image_server/results/check_roi_bigger_cache.h5')
+
+    # list_of_transforms = [TransformTuple(0, 'auto_to_template', 'affine', True)]
+    list_of_transforms = []
+    e_cmd = ExportCmd(channel_name='cfos', output_path='../results/check_roi_0.nii.gz',
+                      output_resolution=None,
+                      input_orientation='PSR', input_resolution_level=0,
+                      list_of_transforms=list_of_transforms,
+                      phys_origin=None, phys_size=None,
+                      segmentation_name=None, region_id=None,
+                      grid_size=[0, 0, 0], overlap_mm=None)
 
     lmf.export_image(e_cmd)
 
@@ -3529,12 +3542,61 @@ def test_region_export(hdf_path):
 
 def test_chunk_export(hdf_path):
     lmf = LightMicroscopyHDF(hdf_path)
-    e_cmd = ExportCmd(channel_name='fos', output_path='../results/exp_4/chunk_level_0.nii.gz',
+    '''e_cmd = ExportCmd(channel_name='fos', output_path='../results/exp_4/chunk_level_0.nii.gz',
                       output_resolution=None,
                       input_orientation='PSR', input_resolution_level=0,
                       list_of_transforms=[],
                       phys_origin=[2.84, 1.81, -4.524], phys_size=[.5, .5, .5],
+                      segmentation_name=None, region_id=None)'''
+
+    e_cmd = ExportCmd(channel_name='cfos', output_path='../results/13_D_chunk_level_0_cfos.nii.gz',
+                      output_resolution=None,
+                      input_orientation='LAI', input_resolution_level=0,
+                      list_of_transforms=[],
+                      phys_origin=[2.895, 4.675, -4.1], phys_size=[0.75, .75, .75],
                       segmentation_name=None, region_id=None)
+
+    lmf.export_image(e_cmd)
+
+
+def test_grid_of_chunks_export(hdf_path):
+    lmf = LightMicroscopyHDF(hdf_path)
+    e_cmd = ExportCmd(channel_name='cfos', output_path='../results/grid_chunks/whatever',
+                      output_resolution=None,
+                      input_orientation='PSR', input_resolution_level=1,
+                      list_of_transforms=[],
+                      phys_origin=[2.5, 1.0, -4.0], phys_size=[0.75, .75, .75],
+                      segmentation_name=None, region_id=None, grid_size=[3, 3, 3], overlap_mm=0.2)
+
+    lmf.export_image(e_cmd)
+
+
+def test_whole_grid_of_chunks_export(hdf_path):
+    lmf = LightMicroscopyHDF(hdf_path)
+    e_cmd = ExportCmd(channel_name='fos', output_path='../results/whole_grid/overlap',
+                      output_resolution=None,
+                      input_orientation='PSR', input_resolution_level=2,
+                      list_of_transforms=[],
+                      phys_origin=[2.5, 1.0, -4.0], phys_size=[2.2, 2.2, 2.2],
+                      segmentation_name=None, region_id=None, grid_size=[0, 0, 0], overlap_mm=0.4)
+
+    lmf.export_image(e_cmd)
+
+
+def test_whole_grid_of_chunks_transformed_export(hdf_path):
+    lmf = LightMicroscopyHDF(hdf_path)
+
+    list_of_transforms = [TransformTuple(0, 'cfos_to_auto', 'affine', True),
+                          TransformTuple(1, 'inverse_warp_template', 'df', True),
+                          TransformTuple(2, 'cfos_to_template', 'affine', True)]
+
+    e_cmd = ExportCmd(channel_name='fos', output_path='../results/whole_grid/transform',
+                      output_resolution=None,
+                      input_orientation='PSR', input_resolution_level=2,
+                      list_of_transforms=list_of_transforms,
+                      # phys_origin=[2.5, 1.0, -4.0], phys_size=[2.2, 2.2, 2.2],
+                      phys_origin=[7.475, 5.975, -4.475], phys_size=[1.25, 1.25, 1.25],
+                      segmentation_name=None, region_id=None, grid_size=[2, 2, 2], overlap_mm=0.0)
 
     lmf.export_image(e_cmd)
 
@@ -3544,14 +3606,17 @@ def test_chunk_transform_export(hdf_path, channel_name='cfos', output_path='../r
     list_of_transforms = [TransformTuple(0, 'cfos_to_auto', 'affine', True),
                           TransformTuple(1, 'inverse_warp_template', 'df', True),
                           TransformTuple(2, 'cfos_to_template', 'affine', True)]
+
+    list_of_transforms = []
     e_cmd = ExportCmd(channel_name=channel_name,
                       output_path=output_path,
-                      output_resolution=None,
-                      input_orientation='PSR', input_resolution_level=0,
+                      output_resolution=[0.006, 0.006, 0.006],
+                      input_orientation='PSR', input_resolution_level=None,
                       list_of_transforms=list_of_transforms,
-                      phys_origin=[7.475, 5.975, -4.475], phys_size=[2.25, 1.25, 3.25],
-                      #phys_origin=[7.475, 5.975, -4.475], phys_size=[1., 1., 1.],
-                      #phys_origin=[5.325, 6.6, -1.975], phys_size=[1.7, 1.5, 1.5],
+                      # phys_origin=[7.475, 5.975, -4.475], phys_size=[2.25, 1.25, 3.25],
+                      # phys_origin=[7.475, 5.975, -4.475], phys_size=[1., 1., 1.],
+                      phys_origin=[2.5, 1.0, -4.0], phys_size=[5., 5., 5.],
+                      # phys_origin=[5.325, 6.6, -1.975], phys_size=[1.7, 1.5, 1.5],
                       segmentation_name=None, region_id=None)
 
     lmf.export_image(e_cmd)
@@ -3561,7 +3626,7 @@ def test_auto_chunk_transform_export(hdf_path):
     lmf = LightMicroscopyHDF(hdf_path)
     list_of_transforms = [TransformTuple(0, 'inverse_warp_template', 'df', True),
                           TransformTuple(1, 'auto_to_template', 'affine', True)]
-    e_cmd = ExportCmd(channel_name='autofluo', output_path='../results/exp_4/auto.nii.gz',
+    e_cmd = ExportCmd(channel_name='autofluo', output_path='../results/exp_4/auto_2.nii.gz',
                       output_resolution=None,
                       input_orientation='PSR', input_resolution_level=0,
                       list_of_transforms=list_of_transforms,
@@ -3584,6 +3649,7 @@ def test_slice_export(hdf_path, channel, output_path):
 if __name__ == '__main__':
     logger.info("Testing..")
 
+
     input_path = '/media/sbednarek/4BCFEE837AD4D9DD/Diana/new_autofluo_2018_01/fos_8/Z_planes/auto_8_Z000.ome.tif'
     json_path = '/home/sbednarek/DEV/lsfm/results/fos_8_metadata.json'
     ome_input_path = '/media/sbednarek/4BCFEE837AD4D9DD/Ctr1.ome.tif'
@@ -3600,7 +3666,7 @@ if __name__ == '__main__':
     json_template_path = '/home/sbednarek/DEV/lsfm_schema/lsfm_image_server/results/metadata/template_25.json'
     seg_path = '/home/sbednarek/DEV/lsfm_schema/lsfm_image_server/results/exp_4/segmentation_in_signal-001-25_deformable.nii.gz'
     auto_seg_path = '/home/sbednarek/DEV/lsfm_schema/lsfm_image_server/results/exp_4/segmentation_in_structural-001-25_deformable.nii.gz'
-    auto_seg_json ='/home/sbednarek/DEV/lsfm_schema/lsfm_image_server/results/metadata/segementation_in_autofluo_11.json'
+    auto_seg_json = '/home/sbednarek/DEV/lsfm_schema/lsfm_image_server/results/metadata/segementation_in_autofluo_11.json'
     json_seg_path = '/home/sbednarek/DEV/lsfm_schema/lsfm_image_server/results/metadata/segmentation_in_signal_11.json'
     df_forward_path = '/home/sbednarek/DEV/lsfm/resources/deformation_field_test/30_transforms/forward_warp_structural_001.nii.gz'
     df_forward_json_path = '../results/metadata/forward_warp.json'
@@ -3619,7 +3685,13 @@ if __name__ == '__main__':
     # test_lmdhf(df_path, df_json_path, '../results/df_test2.h5', True)
     # test_lmdhf(mysz_path, mysz_json_path, '../results/myszdf_RAS.h5')
 
-    #test_export('../results/myszdf_RAS.h5')
+    '''test_lmdhf('/home/sbednarek/DEV/lsfm_schema/lsfm_image_server/resources/Ctrl_4_nowyROI_647_1_MMStack_Pos08.ome.tif',
+               '/home/sbednarek/DEV/lsfm_schema/lsfm_image_server/resources/check_roi.json',
+               '../results/check_roi_big_chunks.h5')'''
+
+    # test_export()
+
+    # test_export('../results/myszdf_RAS.h5')
 
     # test_export('../results/single_test.h5')
 
@@ -3636,50 +3708,57 @@ if __name__ == '__main__':
 
     # write_cfos_affine('../results/template.h5')
 
-    #test_template_export('../results/template.h5')
+    # test_template_export('../results/template.h5')
 
-    #test_lmdhf(exp_4_path, exp_4_json, '../results/exp_4_new.h5', False)
+    # test_lmdhf(exp_4_path, exp_4_json, '../results/exp_4_bigger_close.h5', False)
 
-    #write_exp4_affine('../results/exp_4_new.h5')
+    # write_exp4_affine('../results/exp_4_new.h5')
 
-    #write_exp4_affine('/home/sbednarek/DEV/lsfm/results/experimental_4.h5')
+    # write_exp4_affine('/home/sbednarek/DEV/lsfm/results/experimental_4.h5')
 
-    #add_displacement_field(df_path, df_json_path, '../results/exp_4_new.h5')
+    # add_displacement_field(df_path, df_json_path, '../results/exp_4_new.h5')
 
-    #add_displacement_field(df_path, df_json_path, '/home/sbednarek/DEV/lsfm/results/experimental_4.h5')
+    # add_displacement_field(df_path, df_json_path, '/home/sbednarek/DEV/lsfm/results/experimental_4.h5')
 
-    #test_exp4_export('../results/exp_4_new.h5')
+    # test_exp4_export('../results/exp_4_new.h5')
 
-    #test_exp4_cfos_export('../results/exp_4_new.h5')
+    # test_exp4_cfos_export('../results/exp_4_new.h5')
 
-    #write_seg_to_hdf(seg_path, json_seg_path, '../results/exp_4_new.h5')
+    # write_seg_to_hdf(seg_path, json_seg_path, '../results/exp_4_new.h5')
 
     #test_region_export('../results/exp_4_new.h5')
 
-    #test_chunk_export('../results/exp_4_new.h5')
+    # test_chunk_export('../results/exp_4_new.h5')
 
     #test_chunk_transform_export('../results/exp_4_new.h5')
-    #test_auto_chunk_transform_export('../results/exp_4_new.h5')
+    # test_auto_chunk_transform_export('../results/exp_4_new.h5')
 
-    test_chunk_transform_export('/home/sbednarek/DEV/lsfm_schema/lsfm_image_server/results/exp_4_new.h5',
-                                'fos', output_path='/home/sbednarek/DEV/lsfm_schema/lsfm_image_server/results/exp_4/check_margis_1.nii.gz')
+    # test_chunk_transform_export('/home/sbednarek/DEV/lsfm_schema/lsfm_image_server/results/exp_4_new.h5',
+    #                            'fos', output_path='/home/sbednarek/DEV/lsfm_schema/lsfm_image_server/results/exp_4/check_margis_1.nii.gz')
 
-    #test_chunk_transform_export('/mnt/nicl/home/pmajka/results/experimental_5.h5',
+    # test_chunk_transform_export('/mnt/nicl/home/pmajka/results/experimental_5.h5',
     #                            output_path='../results/experimental_5/in_cfos_whole_amygdala_native_cfos.nii.gz')
 
-    #write_transforms_signal('/mnt/nicl/home/pmajka/results/experimental_5.h5', 'cfos',
+    # write_transforms_signal('/mnt/nicl/home/pmajka/results/experimental_5.h5', 'cfos',
     #                        '/home/sbednarek/DEV/lsfm_pipeline/000012/lsfm_image_server/30_transforms/')
 
-    #test_chunk_transform_export('/mnt/nicl/home/pmajka/results/experimental_3.h5',
+    # test_chunk_transform_export('/mnt/nicl/home/pmajka/results/experimental_3.h5',
     #                            output_path='../results/experimental_3/in_cfos_whole_amygdala_native_cfos.nii.gz')
 
-    #test_chunk_transform_export('/mnt/nicl/home/pmajka/results/experimental_2.h5',
-    #                            output_path='../results/experimental_2/in_cfos_whole_amygdala_native_cfos.nii.gz')
+    # test_chunk_transform_export('/mnt/nicl/home/pmajka/results/experimental_2.h5',
+    #                           output_path='../results/experimental_2/testing_chunk_4.nii.gz')
 
-    #test_chunk_transform_export('/mnt/nicl/home/pmajka/results/control_2.h5',
+    # test_chunk_transform_export('/mnt/nicl/home/pmajka/results/control_2.h5',
     #                            output_path='../results/control_2/in_cfos_whole_amygdala_native_cfos.nii.gz')
 
 
-    #test_slice_export('../results/exp_4_new.h5', 'autofluo', '../results/slices/img_%04d.tif')
+    # test_slice_export('../results/exp_4_new.h5', 'autofluo', '../results/slices/img_%04d.tif')
 
-    #write_seg_to_hdf(auto_seg_path, auto_seg_json, '../results/exp_4_new.h5')
+    # write_seg_to_hdf(auto_seg_path, auto_seg_json, '../results/exp_4_new.h5')
+
+
+    # test_chunk_export('/mnt/nicl/home/sbednarek/lsfm/000013.h5')
+
+    # test_grid_of_chunks_export('/mnt/nicl/home/pmajka/results/experimental_2.h5')
+    #test_whole_grid_of_chunks_export('../results/exp_4_new.h5')
+    # test_whole_grid_of_chunks_transformed_export('../results/exp_4_new.h5')
