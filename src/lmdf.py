@@ -2804,10 +2804,11 @@ class ImageProcessor(object):
             out_origin = input_data.GetOrigin()
             out_direction = input_data.GetDirection()
 
-        #ref_data = meta_ref_image.get_sitk_image()
-        ref_data = sitk.ReadImage('/home/sbednarek/DEV/lsfm_schema/lsfm_image_server/results/04_new_avrgt_25_right_hemisphere.nii')
+        # ref_data = meta_ref_image.get_sitk_image()
+        ref_data = sitk.ReadImage(
+            '/home/sbednarek/DEV/lsfm_schema/lsfm_image_server/results/04_new_avrgt_25_right_hemisphere.nii')
         # ref_data = sitk.ReadImage('/home/sbednarek/DEV/lsfm_schema/lsfm_image_server/results/_cfos_25um.nii.gz')
-        #ref_data = sitk.ReadImage('/home/sbednarek/DEV/lsfm/results/cfos/cfos_autofluo25um.nii.gz')
+        # ref_data = sitk.ReadImage('/home/sbednarek/DEV/lsfm/results/cfos/cfos_autofluo25um.nii.gz')
 
         scale_factors = np.array(ref_data.GetSpacing()) / np.array(input_data.GetSpacing())
         logger.debug("Scale factors from ref image: {}".format(scale_factors))
