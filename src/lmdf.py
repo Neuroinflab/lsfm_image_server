@@ -657,10 +657,10 @@ class LightMicroscopyHDF(object):
     def export_slices(self, export_slices_cmd):
 
         channel = self.get_channel(export_slices_cmd.channel_name)
-        if export_slices_cmd.resample:
-            export_slices_cmd.ref_channel = self.get_channel(export_slices_cmd.ref_channel)
+        # if export_slices_cmd.resample:
+            # export_slices_cmd.ref_channel = self.get_channel(export_slices_cmd.ref_channel)
 
-        channel.export_slices(export_slices_cmd)
+        return channel.export_slices(export_slices_cmd)
 
     @logging_decor
     def write_channel(self, image_proxy, create_bdv=True):
