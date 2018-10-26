@@ -1661,12 +1661,18 @@ class HDFChannel(object):
                     inv_flip = flip[inv_transpose] < 0
                     # create a dummy image
                     d_shape = tuple(np.array(self.shape)[transpose])
-                    d_origin = tuple(np.array(self.origin[transpose]))
+                    # direction fix
+                    d_origin = tuple(np.array(self.origin[transpose]) * np.array([1, -1, -1]))
                     d_voxel_size = tuple(np.array(self.voxel_size[transpose]))
-                    dummy_img = ImageProcessor.create_dummy_image(d_shape, DIRECTION_RAS,
-                                                                  d_voxel_size, d_origin,
-                                                                  self.pixel_type)
+                    logger.debug('size in voxel space: {}'.format(export_cmd.phys_size // d_voxel_size))
+                    logger.debug("origin_transposed: {}".format(d_origin))
+                    logger.debug("voxel_size: {}".format(d_voxel_size))
+
+                    affine_vp, affine_pv = ImageProcessor.get_affines(d_voxel_size, d_origin)
                     start_os_mm = tuple(export_cmd.phys_origin)
+
+                    chunk_size_in_voxels = (export_cmd.phys_size // d_voxel_size).astype(np.int)
+
                     # fix directionality (signs) for this
                     end_os_mm = tuple(np.array(export_cmd.phys_origin) +
                                       np.array(export_cmd.phys_size) * np.array([1, 1, -1]))
@@ -1675,8 +1681,19 @@ class HDFChannel(object):
 
                     # if there are no transforms
                     if not export_cmd.list_of_transforms:
-                        start_index = dummy_img.TransformPhysicalPointToIndex(start_os_mm)
-                        end_index = dummy_img.TransformPhysicalPointToIndex(end_os_mm)
+                        # start_index = dummy_img.TransformPhysicalPointToIndex(start_os_mm)
+                        # logger.debug('start_index from dummy: {}'.format(start_index))
+                        start_index = np.around(affine_pv.TransformPoint(start_os_mm)).astype(np.int)
+                        logger.debug('start_index from affine: {}'.format(affine_pv.TransformPoint(start_os_mm)))
+
+                        # start_os_mm = dummy_img.TransformIndexToPhysicalPoint(start_index)
+                        start_os_mm = affine_vp.TransformPoint(start_index)
+                        start_index = np.abs(start_index)
+                        logger.debug("start_os_mm transformed back from index {}".format(start_os_mm))
+
+                        # end index should be recomputed by voxel space
+                        # end_index = dummy_img.TransformPhysicalPointToIndex(end_os_mm)
+                        end_index = start_index + chunk_size_in_voxels
                         start_index = tuple(np.array(start_index)[inv_transpose])
                         end_index = tuple(np.array(end_index)[inv_transpose])
                         logger.debug("start: {} end: {}".format(start_index, end_index))
@@ -1697,19 +1714,29 @@ class HDFChannel(object):
                     # if there are transforms
                     else:
 
+                        # dummy_img = ImageProcessor.create_dummy_image(d_shape, DIRECTION_RAS,
+                        #                                              d_voxel_size, d_origin,
+                        #                                              self.pixel_type)
+
                         logger.debug("level shape: {}".format(self.shape))
                         composite_transform = CompositeTransform(export_cmd.list_of_transforms)
                         ct = composite_transform.composite
 
                         # lets go back to input space
                         start_is_mm = ct.TransformPoint(start_os_mm)
+                        start_index = np.abs(np.around(affine_pv.TransformPoint(start_is_mm)).astype(np.int))
+                        logger.debug('start_index from affine: {}'.format(start_index))
+                        end_index = start_index + chunk_size_in_voxels
+                        logger.debug('end_index from chunk size: {}'.format(end_index))
                         # end_is_mm = ct.TransformPoint(end_os_mm) this was taking too small chunks
                         end_is_mm = tuple(start_is_mm + np.array(export_cmd.phys_size) * np.array([1, 1, -1]))
+                        end_index_from_phys = np.abs(np.around(affine_pv.TransformPoint(end_is_mm)).astype(np.int))
+                        logger.debug('END INDEX FROM PHYS: {}'.format(end_index_from_phys))
                         logger.debug("start_is: {} end_is: {}".format(start_is_mm, end_is_mm))
 
                         # grab the chunk
-                        start_index = dummy_img.TransformPhysicalPointToIndex(start_is_mm)
-                        end_index = dummy_img.TransformPhysicalPointToIndex(end_is_mm)
+                        # start_index = dummy_img.TransformPhysicalPointToIndex(start_is_mm)
+                        # end_index = dummy_img.TransformPhysicalPointToIndex(end_is_mm)
                         start_index = tuple(np.array(start_index)[inv_transpose])
                         end_index = tuple(np.array(end_index)[inv_transpose])
                         logger.debug("start: {} end: {}".format(start_index, end_index))
@@ -1725,13 +1752,13 @@ class HDFChannel(object):
                         chunk = ImageProcessor.reverse_axes(chunk, flip < 0)
                         chunk_affine = nib.affines.from_matvec(np.diag(d_voxel_size) * SIGN_RAS_A,
                                                                start_is_mm)
-                        #chunk_affine[:3, 3] = start_is_mm
+                        # chunk_affine[:3, 3] = start_is_mm
                         logger.debug("chunk shape: {}".format(chunk.shape))
                         logger.debug("chunk affine: {}".format(chunk_affine))
                         meta_image = MetaImage(chunk, chunk_affine,
                                                self.pixel_type, DIRECTION_RAS, self.is_segmentation)
-                        #meta_image.reorient(export_cmd.input_orientation)
-                        #meta_image.set_direction_RAS()
+                        # meta_image.reorient(export_cmd.input_orientation)
+                        # meta_image.set_direction_RAS()
 
                         out = ImageProcessor.apply_transformations(meta_image,
                                                                    meta_image,
@@ -1750,9 +1777,85 @@ class HDFChannel(object):
                         img_data.SetDirection(DIRECTION_RAS)
                         sitk.WriteImage(img_data, export_cmd.output_path)'''
 
-            if export_cmd.export_region:
-                if not export_cmd.resample_image:
+                else:  # if resampling needed
 
+                    transpose, flip = ImageProcessor.get_transpose(export_cmd.input_orientation)
+                    inv_transpose = np.argsort(transpose)
+                    inv_flip = flip[inv_transpose] < 0
+
+                    d_shape = tuple(np.array(self.shape)[transpose])
+                    # direction fix
+                    d_origin = tuple(np.array(self.origin[transpose]) * np.array([1, -1, -1]))
+                    d_voxel_size = tuple(np.array(self.voxel_size[transpose]))
+                    logger.debug('size in voxel space: {}'.format(export_cmd.phys_size // d_voxel_size))
+                    logger.debug("origin_transposed: {}".format(d_origin))
+                    logger.debug("voxel_size: {}".format(d_voxel_size))
+
+                    affine_vp, affine_pv = ImageProcessor.get_affines(d_voxel_size, d_origin)
+                    start_os_mm = tuple(export_cmd.phys_origin)
+
+                    chunk_size_in_voxels = (export_cmd.phys_size // d_voxel_size).astype(np.int)
+
+                    # fix directionality (signs) for this
+                    end_os_mm = tuple(np.array(export_cmd.phys_origin) +
+                                      np.array(export_cmd.phys_size) * np.array([1, 1, -1]))
+
+                    logger.debug("start: {} end: {}".format(start_os_mm, end_os_mm))
+
+                    scale_factors = d_voxel_size / export_cmd.output_resolution
+                    logger.debug("scale_factors: {}".format(scale_factors))
+
+                    logger.debug("level shape: {}".format(self.shape))
+                    composite_transform = CompositeTransform(export_cmd.list_of_transforms)
+                    ct = composite_transform.composite
+
+                    # lets go back to input space
+                    start_is_mm = ct.TransformPoint(start_os_mm)
+                    start_index = np.abs(np.around(affine_pv.TransformPoint(start_is_mm)).astype(np.int))
+                    logger.debug('start_index from affine: {}'.format(start_index))
+                    end_index = start_index + chunk_size_in_voxels
+                    logger.debug('end_index from chunk size: {}'.format(start_index))
+                    # end_is_mm = ct.TransformPoint(end_os_mm) this was taking too small chunks
+                    end_is_mm = tuple(start_is_mm + np.array(export_cmd.phys_size) * np.array([1, 1, -1]))
+                    logger.debug("start_is: {} end_is: {}".format(start_is_mm, end_is_mm))
+
+                    # grab the chunk
+                    # start_index = dummy_img.TransformPhysicalPointToIndex(start_is_mm)
+                    # end_index = dummy_img.TransformPhysicalPointToIndex(end_is_mm)
+                    start_index = tuple(np.array(start_index)[inv_transpose])
+                    end_index = tuple(np.array(end_index)[inv_transpose])
+                    logger.debug("start: {} end: {}".format(start_index, end_index))
+
+                    chunk = self.get_level_chunk_data(start_index,
+                                                      end_index,
+                                                      inv_flip)
+
+                    # here add resampling to output space
+
+                    # if we want trasformed data:
+                    chunk = chunk.transpose(transpose)
+                    chunk = ImageProcessor.reverse_axes(chunk, flip < 0)
+                    chunk_affine = nib.affines.from_matvec(np.diag(d_voxel_size) * SIGN_RAS_A,
+                                                           start_is_mm)
+                    # chunk_affine[:3, 3] = start_is_mm
+                    logger.debug("chunk shape: {}".format(chunk.shape))
+                    logger.debug("chunk affine: {}".format(chunk_affine))
+                    meta_image = MetaImage(chunk, chunk_affine,
+                                           self.pixel_type, DIRECTION_RAS, self.is_segmentation, self.is_nifti)
+
+                    meta_image = ImageProcessor.resample_image(meta_image, scale_factors)
+
+                    # meta_image.reorient(export_cmd.input_orientation)
+                    # meta_image.set_direction_RAS()
+
+                    out = ImageProcessor.apply_transformations(meta_image,
+                                                               meta_image,
+                                                               composite_transform)
+                    sitk.WriteImage(out, export_cmd.output_path)
+
+            if export_cmd.export_region:
+
+                if not export_cmd.resample_image:
                     # get boundig box for region in segmentation
                     start, end = ImageProcessor.get_bounding_box(export_cmd.segmentation,
                                                                  export_cmd.region_id)
@@ -1774,7 +1877,7 @@ class HDFChannel(object):
                     start_index = dummy_img.TransformPhysicalPointToIndex(start_mm)
                     end_index = dummy_img.TransformPhysicalPointToIndex(end_mm)
                     logger.debug("start: {} end: {}".format(start_index, end_index))
-                    inv_flip = flip[inv_transpose]<0
+                    inv_flip = flip[inv_transpose] < 0
 
                     start_index = tuple(np.array(start_index)[inv_transpose])
                     end_index = tuple(np.array(end_index)[inv_transpose])
@@ -1784,21 +1887,42 @@ class HDFChannel(object):
                                                       inv_flip)
                     logger.debug("chunk dimensions: {}".format(chunk.shape))
                     chunk = chunk.transpose(transpose)
-                    chunk = ImageProcessor.reverse_axes(chunk, flip<0)
+                    chunk = ImageProcessor.reverse_axes(chunk, flip < 0)
 
                     img_data = sitk.GetImageFromArray(chunk.transpose())
                     img_data.SetSpacing(d_voxel_size)
                     img_data.SetOrigin(start_mm)
                     img_data.SetDirection(DIRECTION_RAS)
 
+                    if export_cmd.list_of_transforms:
+                        composite_transform = CompositeTransform(export_cmd.list_of_transforms)
+                        ct = composite_transform.composite
+
+                        chunk_affine = nib.affines.from_matvec(np.diag(d_voxel_size) * SIGN_RAS_A,
+                                                               start_mm)
+                        # chunk_affine[:3, 3] = start_is_mm
+                        logger.debug("chunk shape: {}".format(chunk.shape))
+                        logger.debug("chunk affine: {}".format(chunk_affine))
+                        meta_image = MetaImage(chunk, chunk_affine,
+                                               self.pixel_type, DIRECTION_RAS, self.is_segmentation, self.is_nifti)
+
+                        img_data = ImageProcessor.apply_transformations(meta_image,
+                                                                        meta_image,
+                                                                        composite_transform)
+
                     # now extract the region # TODO parametrize to specify if chunk or actual region preferred
-                    #region = ImageProcessor.extract_labeled_region(export_cmd.region_id,
-                    #                                               img_data,
-                    #                                               export_cmd.segmentation)
 
-                    sitk.WriteImage(img_data, export_cmd.output_path)
+                    temp_seg = sitk.ReadImage('/home/sbednarek/DEV/lsfm_schema/lsfm_image_server/results/exp_4/segmentation_left_hemisphere_mm.nii.gz')
+
+                    region = ImageProcessor.extract_labeled_region(export_cmd.region_id,
+                                                                   img_data,
+                                                                   temp_seg)
+
+
+
+                    #sitk.WriteImage(img_data, export_cmd.output_path)
+                    sitk.WriteImage(region, export_cmd.output_path)
                     return
-
 
             # if export_cmd indicates whole image
             if export_cmd.whole_image:
@@ -1818,7 +1942,7 @@ class HDFChannel(object):
                     # if resampling needed
                     # get the level data, resample, reorient and save
                     meta_image = MetaImage(self.get_level_data(), self.affine,
-                                           self.pixel_type, DIRECTION_LPI, self.is_segmentation)
+                                           self.pixel_type, DIRECTION_LPI, self.is_segmentation, self.is_nifti)
                     meta_image.reorient(export_cmd.input_orientation)
                     scale_factors = meta_image.voxel_size / export_cmd.output_resolution
                     meta_image = ImageProcessor.resample_image(meta_image, scale_factors)
@@ -1835,9 +1959,44 @@ class HDFChannel(object):
 
                 if export_cmd.list_of_transforms:
                     composite_transform = CompositeTransform(export_cmd.list_of_transforms)
-                    out = ImageProcessor.apply_transformations(meta_image,
-                                                               meta_image,
-                                                               composite_transform)
+
+                    # check the expected shape of input data for transformations
+                    transpose, flip = ImageProcessor.get_transpose(export_cmd.input_orientation)
+                    inv_transpose = np.argsort(transpose)
+                    inv_flip = flip[inv_transpose] < 0
+
+                    d_shape = tuple(np.array(self.shape)[transpose])
+                    # direction fix
+                    d_origin = tuple(np.array(self.origin[transpose]) * np.array([1, -1, -1]))
+                    d_voxel_size = tuple(np.array(self.voxel_size[transpose]))
+                    d_phys_size = np.array(self.physical_size[transpose])
+                    logger.debug('size in voxel space: {}'.format(self.shape))
+                    logger.debug('physical size: {}'.format(d_phys_size))
+                    logger.debug("origin_transposed: {}".format(d_origin))
+                    logger.debug("voxel_size: {}".format(d_voxel_size))
+
+                    affine_vp, affine_pv = ImageProcessor.get_affines(d_voxel_size, d_origin)
+
+                    ct = composite_transform.affine_composite
+                    ct_inv = ct.GetInverse()
+                    start_os_mm = ct_inv.TransformPoint(d_origin)
+                    end_is_mm = d_origin + d_phys_size
+                    end_os_mm = ct_inv.TransformPoint(end_is_mm)
+
+                    logger.debug('Transposed origin (mm): {} \n Origin in output space: {} \n End in input space: {}\n'
+                                 'End in output space: {}'.format(d_origin, start_os_mm, end_is_mm, end_os_mm))
+
+                    #start_index = np.abs(np.around(affine_pv.TransformPoint(start_is_mm)).astype(np.int))
+                    #logger.debug('start_index from affine: {}'.format(start_index))
+                    # end check
+
+                    ref_meta_image = export_cmd.ref_channel
+                    # ref_meta_image.reorient('RAS')
+                    # ref_meta_image.set_direction_RAS()
+
+                    out = ImageProcessor.apply_transformations_with_reference(meta_image,
+                                                                              ref_meta_image,
+                                                                              composite_transform)
                     sitk.WriteImage(out, export_cmd.output_path)
 
 
