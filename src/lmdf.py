@@ -1374,7 +1374,10 @@ class HDFChannel(object):
         @staticmethod
         def get_slice(start, end, flip=False, step=1):
             if flip:
-                return slice(-end, -start, step)
+                start = -start
+                if start == 0:
+                    start = None
+                return slice(-end, start, step)
             else:
                 return slice(start, end, step)
 
@@ -1384,7 +1387,6 @@ class HDFChannel(object):
             for i in range(num_slabs):
                 yield slice(slc.start + i * num, slc.start + (i + 1) * num * slc.step, slc.step)
             yield slice(slc.start + num_slabs * num * slc.step, slc.stop, slc.step)
-
 
         def get_resampled_slices(self, cmd):
             """
@@ -1428,7 +1430,7 @@ class HDFChannel(object):
 
             slab_size = np.copy(self.shape)
             planes_to_resample = 10
-            slab_size[cmd.axis] = planes_to_resample #cmd.step
+            slab_size[cmd.axis] = planes_to_resample  # cmd.step
             print(float(self.shape[cmd.axis]))
             output_planes_per_input_planes = target_size[cmd.axis] / float(self.shape[cmd.axis])
 
@@ -1444,28 +1446,27 @@ class HDFChannel(object):
                 resampled_slab = ImageProcessor.resample_sitk(roi_slab, scale_factors, sitk.sitkNearestNeighbor)
                 slab_data = sitk.GetArrayFromImage(resampled_slab)
                 logger.debug("slab shape: {}".format(slab_data.shape))
-                #some_plane = slab_data[:, 5, :]
-                #imsave(cmd.output_path % slab_start + cmd.output_ext, some_plane)
+                # some_plane = slab_data[:, 5, :]
+                # imsave(cmd.output_path % slab_start + cmd.output_ext, some_plane)
                 current_plane = start_index[cmd.axis] * output_planes_per_input_planes
                 logger.debug("current plane: {}".format(current_plane))
 
-                #chosen_planes = slab_data[:, ::cmd.step, :]
+                # chosen_planes = slab_data[:, ::cmd.step, :]
                 chosen_planes = slab_data
                 for i in xrange(chosen_planes.shape[cmd.axis]):
-                    #print("---> "+ str(current_plane + i))
+                    # print("---> "+ str(current_plane + i))
                     if round(current_plane + i) % cmd.step == 0:
-                        #print(current_plane + i)
+                        # print(current_plane + i)
+
                         imsave(cmd.output_path % round(current_plane + i) + cmd.output_ext,
                                chosen_planes[:, i, :])
 
-                    #print(cmd.output_path % plane_no + cmd.output_ext)
-                    #print(current_plane + i * cmd.step)
-                    #imsave(cmd.output_path % round(current_plane + i * cmd.step) + cmd.output_ext,
-                    #       chosen_planes[:, i, :])
-                    #imsave(cmd.output_path % plane_no + cmd.output_ext, chosen_planes[:, i, :])
-                    #plane_no += 1
-
-
+                        # print(cmd.output_path % plane_no + cmd.output_ext)
+                        # print(current_plane + i * cmd.step)
+                        # imsave(cmd.output_path % round(current_plane + i * cmd.step) + cmd.output_ext,
+                        #       chosen_planes[:, i, :])
+                        # imsave(cmd.output_path % plane_no + cmd.output_ext, chosen_planes[:, i, :])
+                        # plane_no += 1
 
             ##
 
@@ -1487,16 +1488,18 @@ class HDFChannel(object):
             imsave('../results/seg_plane_15.tif', some_plane)'''
 
 
-            #compute scaling factors
-            #get meta image for a slab
-            #resample slab, get slices, output images
-
+            # compute scaling factors
+            # get meta image for a slab
+            # resample slab, get slices, output images
 
         def get_slices(self, cmd):
             """
 
             :type cmd: ExportSlicesCmd
             """
+            if cmd.output_path:
+                if not os.path.exists(os.path.dirname(cmd.output_path)):
+                    os.makedirs(os.path.dirname(cmd.output_path))
 
             transpose, flip = ImageProcessor.get_transpose(cmd.input_orientation)
             logger.debug("transpose: {}\n flip: {}".format(transpose, flip))
@@ -1506,19 +1509,35 @@ class HDFChannel(object):
             axis = transpose[cmd.axis]
             axis_inverse = flip[cmd.axis] < 0
             logger.debug("inverse main axis: {}".format(axis_inverse))
-            axis_w, axis_h = np.delete(transpose, cmd.axis, 0)
-            print axis
-            print axis_w
-            print axis_h
+            axis_h, axis_w = np.delete(transpose, cmd.axis, 0)
 
-            #sl_main = self.get_slice(cmd.start, cmd.stop, axis_inverse, step=cmd.step)
+            max_w, max_h, max_z = self.shape[axis_w], self.shape[axis_h], self.shape[axis]
+            logger.debug("max width: {} max height: {} max z: {}".format(max_w, max_h, max_z))
+
+            if cmd.start is None:
+                cmd.start = 0
+
+            if cmd.stop is None:
+                cmd.stop = max_z
+
+            if cmd.roi_ox is None:
+                cmd.roi_ox = 0
+
+            if cmd.roi_oy is None:
+                cmd.roi_oy = 0
+
+            if cmd.roi_sx is None:
+                cmd.roi_sx = max_w
+
+            if cmd.roi_sy is None:
+                cmd.roi_sy = max_h
+
+            # sl_main = self.get_slice(cmd.start, cmd.stop, axis_inverse, step=cmd.step)
             sl_main = self.get_slice(cmd.start, cmd.stop, False, step=cmd.step)
             sl_w = self.get_slice(cmd.roi_ox, cmd.roi_ox + cmd.roi_sx, inv_flip[axis_w])
             sl_h = self.get_slice(cmd.roi_oy, cmd.roi_oy + cmd.roi_sy, inv_flip[axis_h])
 
             logger.debug("sl_main: {}".format(sl_main))
-
-
 
             logger.debug("voxel size h: {0:.4f}".format(self.voxel_size[axis_h]))
             logger.debug("voxel size w: {0:.4f}".format(self.voxel_size[axis_w]))
@@ -1530,28 +1549,33 @@ class HDFChannel(object):
             sl_dict[axis_h] = sl_h
 
             list_of_batch_slices = list(self.batch_slices(sl_main))
-            list_of_batch_slices = list_of_batch_slices[::-1]
+            #if axis_inverse:
+            #list_of_batch_slices = list_of_batch_slices[::-1]
             print(list_of_batch_slices)
 
-
-            #for main_slice in self.batch_slices(sl_main):
+            # for main_slice in self.batch_slices(sl_main):
             for main_slice in list_of_batch_slices:
-                #main_slice = slice(main_slice.start * -1, main_slice.stop * -1, main_slice.step)
-                print main_slice
+                # main_slice = slice(main_slice.start * -1, main_slice.stop * -1, main_slice.step)
+                logger.debug("main slice: {}".format(main_slice))
                 sl_dict[axis] = main_slice
-                print sl_dict
+                logger.debug("sl_dict: {}".format(sl_dict))
                 data = self.h5_file[self.path][sl_dict[0], sl_dict[1], sl_dict[2]]
-
                 data = data.transpose([axis, axis_h, axis_w])
                 if axis_inverse:
                     data = data[::-1]
                 logger.debug("batch data shape: {}".format(data.shape))
 
                 for plane in data:
-                    imsave(cmd.output_path % plane_count + cmd.output_ext, plane)
+                    if cmd.output_path:
+                        imageio.imwrite(cmd.output_path % plane_count + cmd.output_ext, plane)
+                    else:
+                        yield plane
                     plane_count += 1
 
+            return
+
         def get_level_chunk_data(self, start_idx, end_idx, flip):
+
             slx = self.get_slice(start_idx[0], end_idx[0], flip[0])
             sly = self.get_slice(start_idx[1], end_idx[1], flip[1])
             slz = self.get_slice(start_idx[2], end_idx[2], flip[2])
