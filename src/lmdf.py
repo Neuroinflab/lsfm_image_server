@@ -1318,17 +1318,53 @@ class HDFChannel(object):
         if len(distances) == 0:
             return 0
         else:
-            # return np.argmin(distances)
-            return 2
+            return np.argmin(distances)
 
     def __repr__(self):
-        return self.channel_name + "\n".join(str(pl) for pl in self.pyramid_levels)
+        """
+
+        :return: string representation of channel: affines and displacement fields written,
+                 information concerning levels of the pyramid of resolutions
+        """
+
+        try:
+            affines = self.h5_file[PathUtil.get_lsfm_affines_group_path(self.channel_name)].keys()
+            affines = "\n".join(affines)
+        except KeyError:
+            affines = "No affines were found for this channel."
+
+        try:
+            displacement_fields = self.h5_file[PathUtil.get_lsfm_dfs_path(self.channel_name)].keys()
+            displacement_fields = "\n".join(displacement_fields)
+        except KeyError:
+            displacement_fields = "No displacement fields were found for this channel"
+
+        pyramid_levels = "\n".join(str(pl) for pl in self.pyramid_levels)
+
+        r = "Channel:\n {} \n" \
+            "\n\nAffines:\n {} \n" \
+            "\n\nDisplacement Fields:\n {} \n" \
+            "\n\nPyramid levels:\n {}".format(self.channel_name,
+                                               affines,
+                                               displacement_fields,
+                                               pyramid_levels)
+
+        return r
 
     class PyramidLevel(object):
 
         def __init__(self, h5_file):
             self.h5_file = h5_file
             self.data = None
+            self.pixel_type = None
+            self.is_segmentation = None
+            self.is_nifti = None
+            self.path = None
+            self.origin = None
+            self.shape = None
+            self.voxel_size = None
+            self.physical_size = None
+            self.affine = None
 
         def get_level_data(self):
             if self.data is None:
