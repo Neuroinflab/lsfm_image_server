@@ -705,8 +705,6 @@ class LightMicroscopyHDF(object):
             data_idx = 0
             for data in _channel.image.stream_data():
                 meta_image = MetaImage.meta_image_from_channel(data, _channel)
-                # xkcd
-                # meta_image.set_direction_RAS()
                 if _channel.image.is_stream:
                     logger.debug("Processing data : {}/{}".format(data_idx + 1,
                                                                   _channel.image.num_of_stacks))
@@ -729,8 +727,6 @@ class LightMicroscopyHDF(object):
                         scale_factors = _channel.relative_resolution_scales[level_num][:len(_channel.image.image_shape)]
                         logger.debug("Scale factors for resampling: {}".format(scale_factors))
                         meta_image = ImageProcessor.resample_image(meta_image, scale_factors)
-                        # xkcd
-                        # meta_image.set_direction_RAS()
                         writing_slice = slice(0, None)
 
                         if _channel.image.is_stream:
@@ -1145,11 +1141,8 @@ class HDFChannel(object):
 
         df_level = df_channel.pyramid_levels[0]
         cmd = ExportCmd(None, None, None, 'RAS', 0, [], None, None, None, None, None, None)
-        #df_meta_image = df_level.get_meta_image(cmd)
-        #df = df_meta_image.get_sitk_image()
         df = df_level.get_meta_image(cmd)
         df = sitk.Cast(df, sitk.sitkVectorFloat64)
-        # sitk.WriteImage(df, '../results/exp_4/inner_df.nii.gz')
         dft = sitk.DisplacementFieldTransform(df)
         return dft
 
@@ -1162,8 +1155,6 @@ class HDFChannel(object):
 
         seg_level = seg_channel.pyramid_levels[0]
         cmd = ExportCmd(None, None, None, 'RAS', 0, [], None, None, None, None, None, None)
-        #seg_meta_image = seg_level.get_meta_image(cmd)
-        #seg = seg_meta_image.get_sitk_image()
         seg = seg_level.get_meta_image(cmd)
         seg = sitk.Cast(seg, sitk.sitkInt16)
         return seg
@@ -1507,8 +1498,8 @@ class HDFChannel(object):
             logger.debug("inverse transpose: {}".format(inv_transpose))
             inv_flip = flip[inv_transpose] < 0
             axis = transpose[cmd.axis]
-            axis_inverse = flip[cmd.axis] < 0
-            logger.debug("inverse main axis: {}".format(axis_inverse))
+            # axis_inverse = flip[cmd.axis] < 0
+            # logger.debug("inverse main axis: {}".format(axis_inverse))
             axis_h, axis_w = np.delete(transpose, cmd.axis, 0)
 
             max_w, max_h, max_z = self.shape[axis_w], self.shape[axis_h], self.shape[axis]
@@ -1532,7 +1523,6 @@ class HDFChannel(object):
             if cmd.roi_sy is None:
                 cmd.roi_sy = max_h
 
-            # sl_main = self.get_slice(cmd.start, cmd.stop, axis_inverse, step=cmd.step)
             sl_main = self.get_slice(cmd.start, cmd.stop, False, step=cmd.step)
             sl_w = self.get_slice(cmd.roi_ox, cmd.roi_ox + cmd.roi_sx, inv_flip[axis_w])
             sl_h = self.get_slice(cmd.roi_oy, cmd.roi_oy + cmd.roi_sy, inv_flip[axis_h])
@@ -1549,11 +1539,10 @@ class HDFChannel(object):
             sl_dict[axis_h] = sl_h
 
             list_of_batch_slices = list(self.batch_slices(sl_main))
-            #if axis_inverse:
-            #list_of_batch_slices = list_of_batch_slices[::-1]
-            print(list_of_batch_slices)
+            # if axis_inverse:
+            # list_of_batch_slices = list_of_batch_slices[::-1]
+            logger.debug("List of batch slices: {}".format(list_of_batch_slices))
 
-            # for main_slice in self.batch_slices(sl_main):
             for main_slice in list_of_batch_slices:
                 # main_slice = slice(main_slice.start * -1, main_slice.stop * -1, main_slice.step)
                 logger.debug("main slice: {}".format(main_slice))
@@ -1561,8 +1550,8 @@ class HDFChannel(object):
                 logger.debug("sl_dict: {}".format(sl_dict))
                 data = self.h5_file[self.path][sl_dict[0], sl_dict[1], sl_dict[2]]
                 data = data.transpose([axis, axis_h, axis_w])
-                if axis_inverse:
-                    data = data[::-1]
+                # if axis_inverse:
+                    # data = data[::-1]
                 logger.debug("batch data shape: {}".format(data.shape))
 
                 for plane in data:
@@ -1585,14 +1574,6 @@ class HDFChannel(object):
             logger.debug("slz: {}".format(slz))
 
             expected_shape = end_idx - start_idx
-
-            '''expected_shape = np.array([slx.stop - slx.start,
-                                       sly.stop - sly.start,
-                                       slz.stop - slz.start])'''
-
-            '''expected_shape = np.array([len(xrange(*slx.indices(max(self.shape[0], slx.stop)))),
-                                       len(xrange(*sly.indices(max(self.shape[1], sly.stop)))),
-                                       len(xrange(*slz.indices(max(self.shape[2], sly.stop))))])'''
 
             logger.debug("Pyramid level shape: {}".format(self.shape))
             logger.debug("Expected chunk shape from source: {}".format(expected_shape))
@@ -1619,7 +1600,6 @@ class HDFChannel(object):
             logger.debug("proper chunk shape: {}".format(proper_shape))
             proper_chunk = np.zeros(proper_shape, dtype=data.dtype)
 
-            # proper_chunk[:data.shape[0], :data.shape[1], :data.shape[2]] = data
             logger.debug("data_slx: {}".format(data_slx))
             logger.debug("data_sly: {}".format(data_sly))
             logger.debug("data_slz: {}".format(data_slz))
@@ -1644,365 +1624,6 @@ class HDFChannel(object):
                 return True
             else:
                 return output_img
-
-        def old_get_meta_image(self, export_cmd):
-            """
-
-            :type export_cmd: ExportCmd
-            """
-
-            # we want just a chunk
-            if not export_cmd.whole_image:
-                # if no need for resampling:
-                if not export_cmd.resample_image:
-                    # get the transpose
-                    transpose, flip = ImageProcessor.get_transpose(export_cmd.input_orientation)
-                    inv_transpose = np.argsort(transpose)
-                    inv_flip = flip[inv_transpose] < 0
-                    # create a dummy image
-                    d_shape = tuple(np.array(self.shape)[transpose])
-                    # direction fix
-                    d_origin = tuple(np.array(self.origin[transpose]) * np.array([1, -1, -1]))
-                    d_voxel_size = tuple(np.array(self.voxel_size[transpose]))
-                    logger.debug('size in voxel space: {}'.format(export_cmd.phys_size // d_voxel_size))
-                    logger.debug("origin_transposed: {}".format(d_origin))
-                    logger.debug("voxel_size: {}".format(d_voxel_size))
-
-                    affine_vp, affine_pv = ImageProcessor.get_affines(d_voxel_size, d_origin)
-                    start_os_mm = tuple(export_cmd.phys_origin)
-
-                    chunk_size_in_voxels = (export_cmd.phys_size // d_voxel_size).astype(np.int)
-
-                    # fix directionality (signs) for this
-                    end_os_mm = tuple(np.array(export_cmd.phys_origin) +
-                                      np.array(export_cmd.phys_size) * np.array([1, 1, -1]))
-
-                    logger.debug("start: {} end: {}".format(start_os_mm, end_os_mm))
-
-                    # if there are no transforms
-                    if not export_cmd.list_of_transforms:
-                        # start_index = dummy_img.TransformPhysicalPointToIndex(start_os_mm)
-                        # logger.debug('start_index from dummy: {}'.format(start_index))
-                        start_index = np.around(affine_pv.TransformPoint(start_os_mm)).astype(np.int)
-                        logger.debug('start_index from affine: {}'.format(affine_pv.TransformPoint(start_os_mm)))
-
-                        # start_os_mm = dummy_img.TransformIndexToPhysicalPoint(start_index)
-                        start_os_mm = affine_vp.TransformPoint(start_index)
-                        start_index = np.abs(start_index)
-                        logger.debug("start_os_mm transformed back from index {}".format(start_os_mm))
-
-                        # end index should be recomputed by voxel space
-                        # end_index = dummy_img.TransformPhysicalPointToIndex(end_os_mm)
-                        end_index = start_index + chunk_size_in_voxels
-                        start_index = tuple(np.array(start_index)[inv_transpose])
-                        end_index = tuple(np.array(end_index)[inv_transpose])
-                        logger.debug("start: {} end: {}".format(start_index, end_index))
-
-                        chunk = self.get_level_chunk_data(start_index,
-                                                          end_index,
-                                                          inv_flip)
-                        logger.debug("chunk dimensions: {}".format(chunk.shape))
-                        chunk = chunk.transpose(transpose)
-                        chunk = ImageProcessor.reverse_axes(chunk, flip < 0)
-
-                        img_data = sitk.GetImageFromArray(chunk.transpose())
-                        img_data.SetSpacing(d_voxel_size)
-                        img_data.SetOrigin(start_os_mm)
-                        img_data.SetDirection(DIRECTION_RAS)
-                        sitk.WriteImage(img_data, export_cmd.output_path)
-
-                    # if there are transforms
-                    else:
-
-                        # dummy_img = ImageProcessor.create_dummy_image(d_shape, DIRECTION_RAS,
-                        #                                              d_voxel_size, d_origin,
-                        #                                              self.pixel_type)
-
-                        logger.debug("level shape: {}".format(self.shape))
-                        composite_transform = CompositeTransform(export_cmd.list_of_transforms)
-                        ct = composite_transform.composite
-
-                        # lets go back to input space
-                        start_is_mm = ct.TransformPoint(start_os_mm)
-                        start_index = np.abs(np.around(affine_pv.TransformPoint(start_is_mm)).astype(np.int))
-                        logger.debug('start_index from affine: {}'.format(start_index))
-                        end_index = start_index + chunk_size_in_voxels
-                        logger.debug('end_index from chunk size: {}'.format(end_index))
-                        # end_is_mm = ct.TransformPoint(end_os_mm) this was taking too small chunks
-                        end_is_mm = tuple(start_is_mm + np.array(export_cmd.phys_size) * np.array([1, 1, -1]))
-                        end_index_from_phys = np.abs(np.around(affine_pv.TransformPoint(end_is_mm)).astype(np.int))
-                        logger.debug('END INDEX FROM PHYS: {}'.format(end_index_from_phys))
-                        logger.debug("start_is: {} end_is: {}".format(start_is_mm, end_is_mm))
-
-                        # grab the chunk
-                        # start_index = dummy_img.TransformPhysicalPointToIndex(start_is_mm)
-                        # end_index = dummy_img.TransformPhysicalPointToIndex(end_is_mm)
-                        start_index = tuple(np.array(start_index)[inv_transpose])
-                        end_index = tuple(np.array(end_index)[inv_transpose])
-                        logger.debug("start: {} end: {}".format(start_index, end_index))
-
-                        chunk = self.get_level_chunk_data(start_index,
-                                                          end_index,
-                                                          inv_flip)
-
-                        # here add resampling to output space
-
-                        # if we want trasformed data:
-                        chunk = chunk.transpose(transpose)
-                        chunk = ImageProcessor.reverse_axes(chunk, flip < 0)
-                        chunk_affine = nib.affines.from_matvec(np.diag(d_voxel_size) * SIGN_RAS_A,
-                                                               start_is_mm)
-                        # chunk_affine[:3, 3] = start_is_mm
-                        logger.debug("chunk shape: {}".format(chunk.shape))
-                        logger.debug("chunk affine: {}".format(chunk_affine))
-                        meta_image = MetaImage(chunk, chunk_affine,
-                                               self.pixel_type, DIRECTION_RAS, self.is_segmentation)
-                        # meta_image.reorient(export_cmd.input_orientation)
-                        # meta_image.set_direction_RAS()
-
-                        out = ImageProcessor.apply_transformations(meta_image,
-                                                                   meta_image,
-                                                                   composite_transform)
-                        sitk.WriteImage(out, export_cmd.output_path)
-                        # end trasformateion
-
-
-                        # for untransformed data:
-                        '''
-                        chunk = chunk.transpose(transpose)
-                        chunk = ImageProcessor.reverse_axes(chunk, flip < 0)
-                        img_data = sitk.GetImageFromArray(chunk.transpose())
-                        img_data.SetSpacing(d_voxel_size)
-                        img_data.SetOrigin(start_is_mm)
-                        img_data.SetDirection(DIRECTION_RAS)
-                        sitk.WriteImage(img_data, export_cmd.output_path)'''
-
-                else:  # if resampling needed
-
-                    transpose, flip = ImageProcessor.get_transpose(export_cmd.input_orientation)
-                    inv_transpose = np.argsort(transpose)
-                    inv_flip = flip[inv_transpose] < 0
-
-                    d_shape = tuple(np.array(self.shape)[transpose])
-                    # direction fix
-                    d_origin = tuple(np.array(self.origin[transpose]) * np.array([1, -1, -1]))
-                    d_voxel_size = tuple(np.array(self.voxel_size[transpose]))
-                    logger.debug('size in voxel space: {}'.format(export_cmd.phys_size // d_voxel_size))
-                    logger.debug("origin_transposed: {}".format(d_origin))
-                    logger.debug("voxel_size: {}".format(d_voxel_size))
-
-                    affine_vp, affine_pv = ImageProcessor.get_affines(d_voxel_size, d_origin)
-                    start_os_mm = tuple(export_cmd.phys_origin)
-
-                    chunk_size_in_voxels = (export_cmd.phys_size // d_voxel_size).astype(np.int)
-
-                    # fix directionality (signs) for this
-                    end_os_mm = tuple(np.array(export_cmd.phys_origin) +
-                                      np.array(export_cmd.phys_size) * np.array([1, 1, -1]))
-
-                    logger.debug("start: {} end: {}".format(start_os_mm, end_os_mm))
-
-                    scale_factors = d_voxel_size / export_cmd.output_resolution
-                    logger.debug("scale_factors: {}".format(scale_factors))
-
-                    logger.debug("level shape: {}".format(self.shape))
-                    composite_transform = CompositeTransform(export_cmd.list_of_transforms)
-                    ct = composite_transform.composite
-
-                    # lets go back to input space
-                    start_is_mm = ct.TransformPoint(start_os_mm)
-                    start_index = np.abs(np.around(affine_pv.TransformPoint(start_is_mm)).astype(np.int))
-                    logger.debug('start_index from affine: {}'.format(start_index))
-                    end_index = start_index + chunk_size_in_voxels
-                    logger.debug('end_index from chunk size: {}'.format(start_index))
-                    # end_is_mm = ct.TransformPoint(end_os_mm) this was taking too small chunks
-                    end_is_mm = tuple(start_is_mm + np.array(export_cmd.phys_size) * np.array([1, 1, -1]))
-                    logger.debug("start_is: {} end_is: {}".format(start_is_mm, end_is_mm))
-
-                    # grab the chunk
-                    # start_index = dummy_img.TransformPhysicalPointToIndex(start_is_mm)
-                    # end_index = dummy_img.TransformPhysicalPointToIndex(end_is_mm)
-                    start_index = tuple(np.array(start_index)[inv_transpose])
-                    end_index = tuple(np.array(end_index)[inv_transpose])
-                    logger.debug("start: {} end: {}".format(start_index, end_index))
-
-                    chunk = self.get_level_chunk_data(start_index,
-                                                      end_index,
-                                                      inv_flip)
-
-                    # here add resampling to output space
-
-                    # if we want trasformed data:
-                    chunk = chunk.transpose(transpose)
-                    chunk = ImageProcessor.reverse_axes(chunk, flip < 0)
-                    chunk_affine = nib.affines.from_matvec(np.diag(d_voxel_size) * SIGN_RAS_A,
-                                                           start_is_mm)
-                    # chunk_affine[:3, 3] = start_is_mm
-                    logger.debug("chunk shape: {}".format(chunk.shape))
-                    logger.debug("chunk affine: {}".format(chunk_affine))
-                    meta_image = MetaImage(chunk, chunk_affine,
-                                           self.pixel_type, DIRECTION_RAS, self.is_segmentation, self.is_nifti)
-
-                    meta_image = ImageProcessor.resample_image(meta_image, scale_factors)
-
-                    # meta_image.reorient(export_cmd.input_orientation)
-                    # meta_image.set_direction_RAS()
-
-                    out = ImageProcessor.apply_transformations(meta_image,
-                                                               meta_image,
-                                                               composite_transform)
-                    sitk.WriteImage(out, export_cmd.output_path)
-
-            if export_cmd.export_region:
-
-                if not export_cmd.resample_image:
-                    # get boundig box for region in segmentation
-                    start, end = ImageProcessor.get_bounding_box(export_cmd.segmentation,
-                                                                 export_cmd.region_id)
-
-                    start_mm = export_cmd.segmentation.TransformIndexToPhysicalPoint(start)
-                    end_mm = export_cmd.segmentation.TransformIndexToPhysicalPoint(end)
-                    # get transpose and flip:
-                    transpose, flip = ImageProcessor.get_transpose(export_cmd.input_orientation)
-                    inv_transpose = np.argsort(transpose)
-
-                    # get dummy image of current level
-                    d_shape = tuple(np.array(self.shape)[transpose])
-                    d_origin = tuple(np.array(self.origin[transpose]))
-                    d_voxel_size = tuple(np.array(self.voxel_size[transpose]))
-                    dummy_img = ImageProcessor.create_dummy_image(d_shape, DIRECTION_RAS,
-                                                                  d_voxel_size, d_origin,
-                                                                  self.pixel_type)
-
-                    start_index = dummy_img.TransformPhysicalPointToIndex(start_mm)
-                    end_index = dummy_img.TransformPhysicalPointToIndex(end_mm)
-                    logger.debug("start: {} end: {}".format(start_index, end_index))
-                    inv_flip = flip[inv_transpose] < 0
-
-                    start_index = tuple(np.array(start_index)[inv_transpose])
-                    end_index = tuple(np.array(end_index)[inv_transpose])
-
-                    chunk = self.get_level_chunk_data(start_index,
-                                                      end_index,
-                                                      inv_flip)
-                    logger.debug("chunk dimensions: {}".format(chunk.shape))
-                    chunk = chunk.transpose(transpose)
-                    chunk = ImageProcessor.reverse_axes(chunk, flip < 0)
-
-                    img_data = sitk.GetImageFromArray(chunk.transpose())
-                    img_data.SetSpacing(d_voxel_size)
-                    img_data.SetOrigin(start_mm)
-                    img_data.SetDirection(DIRECTION_RAS)
-
-                    if export_cmd.list_of_transforms:
-                        composite_transform = CompositeTransform(export_cmd.list_of_transforms)
-                        ct = composite_transform.composite
-
-                        chunk_affine = nib.affines.from_matvec(np.diag(d_voxel_size) * SIGN_RAS_A,
-                                                               start_mm)
-                        # chunk_affine[:3, 3] = start_is_mm
-                        logger.debug("chunk shape: {}".format(chunk.shape))
-                        logger.debug("chunk affine: {}".format(chunk_affine))
-                        meta_image = MetaImage(chunk, chunk_affine,
-                                               self.pixel_type, DIRECTION_RAS, self.is_segmentation, self.is_nifti)
-
-                        img_data = ImageProcessor.apply_transformations(meta_image,
-                                                                        meta_image,
-                                                                        composite_transform)
-
-                    # now extract the region # TODO parametrize to specify if chunk or actual region preferred
-
-                    temp_seg = sitk.ReadImage('/home/sbednarek/DEV/lsfm_schema/lsfm_image_server/results/exp_4/segmentation_left_hemisphere_mm.nii.gz')
-
-                    region = ImageProcessor.extract_labeled_region(export_cmd.region_id,
-                                                                   img_data,
-                                                                   temp_seg)
-
-
-
-                    #sitk.WriteImage(img_data, export_cmd.output_path)
-                    sitk.WriteImage(region, export_cmd.output_path)
-                    return
-
-            # if export_cmd indicates whole image
-            if export_cmd.whole_image:
-                # if export_cmd indicates no resampling needed
-                if not export_cmd.resample_image:
-                    # get the level data, reorient, and save
-
-                    meta_image = MetaImage(self.get_level_data(), self.affine,
-                                           self.pixel_type, DIRECTION_LPI, self.is_segmentation, self.is_nifti)
-                    meta_image.reorient(export_cmd.input_orientation)
-                    meta_image.set_direction_RAS()
-                    if export_cmd.output_path is not None:
-                        meta_image.save_nifti(export_cmd.output_path)
-                    else:
-                        return meta_image
-                else:
-                    # if resampling needed
-                    # get the level data, resample, reorient and save
-                    meta_image = MetaImage(self.get_level_data(), self.affine,
-                                           self.pixel_type, DIRECTION_LPI, self.is_segmentation, self.is_nifti)
-                    meta_image.reorient(export_cmd.input_orientation)
-                    scale_factors = meta_image.voxel_size / export_cmd.output_resolution
-                    meta_image = ImageProcessor.resample_image(meta_image, scale_factors)
-                    meta_image.set_direction_RAS()
-                    if export_cmd.output_path is not None:
-                        if not export_cmd.list_of_transforms:
-                            if export_cmd.export_region:
-                                logger.debug("Exporting region")
-                                return meta_image.get_sitk_image()
-                            else:
-                                meta_image.save_nifti(export_cmd.output_path)
-                    else:
-                        return meta_image
-
-                if export_cmd.list_of_transforms:
-                    composite_transform = CompositeTransform(export_cmd.list_of_transforms)
-
-                    # check the expected shape of input data for transformations
-                    transpose, flip = ImageProcessor.get_transpose(export_cmd.input_orientation)
-                    inv_transpose = np.argsort(transpose)
-                    inv_flip = flip[inv_transpose] < 0
-
-                    d_shape = tuple(np.array(self.shape)[transpose])
-                    # direction fix
-                    d_origin = tuple(np.array(self.origin[transpose]) * np.array([1, -1, -1]))
-                    d_voxel_size = tuple(np.array(self.voxel_size[transpose]))
-                    d_phys_size = np.array(self.physical_size[transpose])
-                    logger.debug('size in voxel space: {}'.format(self.shape))
-                    logger.debug('physical size: {}'.format(d_phys_size))
-                    logger.debug("origin_transposed: {}".format(d_origin))
-                    logger.debug("voxel_size: {}".format(d_voxel_size))
-
-                    affine_vp, affine_pv = ImageProcessor.get_affines(d_voxel_size, d_origin)
-
-                    ct = composite_transform.affine_composite
-                    ct_inv = ct.GetInverse()
-                    start_os_mm = ct_inv.TransformPoint(d_origin)
-                    end_is_mm = d_origin + d_phys_size
-                    end_os_mm = ct_inv.TransformPoint(end_is_mm)
-
-                    logger.debug('Transposed origin (mm): {} \n Origin in output space: {} \n End in input space: {}\n'
-                                 'End in output space: {}'.format(d_origin, start_os_mm, end_is_mm, end_os_mm))
-
-                    #start_index = np.abs(np.around(affine_pv.TransformPoint(start_is_mm)).astype(np.int))
-                    #logger.debug('start_index from affine: {}'.format(start_index))
-                    # end check
-
-                    ref_meta_image = export_cmd.ref_channel
-                    # ref_meta_image.reorient('RAS')
-                    # ref_meta_image.set_direction_RAS()
-
-                    out = ImageProcessor.apply_transformations_with_reference(meta_image,
-                                                                              ref_meta_image,
-                                                                              composite_transform)
-                    sitk.WriteImage(out, export_cmd.output_path)
-
-
-
-                    # return MetaImage(self.get_level_data(), self.affine,
-                    #                 self.pixel_type, DIRECTION_LPI, self.is_segmentation)
 
         def __repr__(self):
 
@@ -2673,165 +2294,10 @@ class ImageProcessor(object):
         resampler.SetSize(map(int, output_size))
         resampler.SetOutputDirection(input_image.GetDirection())
 
-        # resampler.SetReferenceImage(ref_image)
         resampler.SetTransform(composite_transform.composite)
 
         out = resampler.Execute(input_image)
-        # sitk.WriteImage(out, '../results/exp_4/test_from_inner_data.nii.gz')
         return out
-
-
-    '''@staticmethod
-    def apply_transformations(meta_image, meta_ref_image, composite_transform):
-
-        # input_image = sitk.ReadImage('../results/exp_4/001_10_mm.nii.gz')
-        input_image = meta_image.get_sitk_image()
-        # sitk.WriteImage(input_image, '../results/exp_4/chunk_to_transform.nii.gz')
-        # output_origin = composite_transform.composite.TransformPoint(input_image.GetOrigin())
-        output_origin = composite_transform.affine_composite.GetInverse().TransformPoint(input_image.GetOrigin())
-
-        # output_origin = composite_transform.composite.GetInverse().TransformPoint(input_image.GetOrigin())
-        # output_origin = np.array(output_origin) * np.array([-1, -1, 1])
-
-        output_size = np.array(
-            input_image.GetSize())  # + 2 * np.abs(np.round(output_origin / np.array(input_image.GetSpacing())))
-
-        logger.debug("output_size: {}".format(output_size))
-        logger.debug("input spacing: {}".format(input_image.GetSpacing()))
-
-        #
-        # ref_image = sitk.ReadImage('../results/exp_4/template_both_hemispheres_mm.nii.gz')
-
-        resampler = sitk.ResampleImageFilter()
-        resampler.SetInterpolator(sitk.sitkLinear)
-        resampler.SetDefaultPixelValue(0)
-
-        resampler.SetOutputOrigin(output_origin)
-        resampler.SetOutputSpacing(input_image.GetSpacing())
-        resampler.SetSize(map(int, output_size))
-        resampler.SetOutputDirection(input_image.GetDirection())
-
-        # resampler.SetReferenceImage(ref_image)
-        resampler.SetTransform(composite_transform.composite)
-
-        out = resampler.Execute(input_image)
-        # sitk.WriteImage(out, '../results/exp_4/test_from_inner_data.nii.gz')
-        return out'''
-
-    @staticmethod
-    def apply_transformations_with_reference(meta_image, meta_ref_image, composite_transform):
-
-        """
-        :type meta_image: MetaImage
-        :type meta_ref_image: MetaImage
-        :type composite_transform: CompositeTransform
-        """
-
-        input_data = meta_image.get_sitk_image()
-        logger.debug("Input origin: {}".format(input_data.GetOrigin()))
-
-        ref_data = meta_ref_image.get_sitk_image()
-        logger.debug("Ref origin: {}".format(ref_data.GetOrigin()))
-
-        affine_composite = composite_transform.affine_composite
-        if affine_composite is not None:
-            out_direction = tuple(Affine.get_direction_matrix_from_itk_affine(affine_composite.GetInverse()).flatten())
-            logger.debug("Output direction: {}".format(out_direction))
-        else:
-            out_origin = input_data.GetOrigin()
-            out_direction = input_data.GetDirection()
-
-
-        # figure out output origin based on ref image and scale factors
-        input_offset = ImageProcessor.compute_offset(ref_data, meta_ref_image.voxel_size)
-        output_offset = ImageProcessor.compute_offset(input_data, input_data.GetSpacing())
-
-        output_origin = meta_ref_image.origin - input_offset + output_offset
-        output_origin = np.diag(output_origin)
-
-        logger.debug('OUTPUT ORIGIN BASED ON REF IMAGE AND RESCALING: {}'.format(output_origin))
-
-        output_origin = composite_transform.affine_composite.GetInverse().TransformPoint(input_data.GetOrigin())
-        logger.debug('OUTPUT ORIGIN BASED ON AFFINE TRASNFORM OF INPUT ORIGIN: {}'.format(output_origin))
-        # end figure out
-
-        scale_factors = np.array(ref_data.GetSpacing()) / np.array(input_data.GetSpacing())
-        logger.debug("Scale factors from ref image: {}".format(scale_factors))
-
-        # resample ref image
-        resampled_ref_image = ImageProcessor.resample_image(meta_ref_image, 1./scale_factors)
-        output_origin = resampled_ref_image.get_sitk_image().GetOrigin()
-        logger.debug('OUTPUT ORIGIN BASED ON RESAMPLED REF IMAGE: {}'.format(output_origin))
-        # end resample ref image
-
-        output_size = np.int16(np.floor(np.array(ref_data.GetSize()) * scale_factors))
-
-        logger.debug("Size from ref image: {}".format(output_size))
-
-        resampler = sitk.ResampleImageFilter()
-        resampler.SetInterpolator(meta_image.sitk_data.interpolation_type)
-        resampler.SetDefaultPixelValue(0)
-        resampler.SetTransform(composite_transform.composite)
-        resampler.SetSize((map(int, output_size)))
-        resampler.SetOutputDirection(input_data.GetDirection())
-        resampler.SetOutputSpacing(input_data.GetSpacing())
-        resampler.SetOutputOrigin(output_origin)
-
-        # resampler.SetReferenceImage(ref_data)
-
-        output_data = resampler.Execute(input_data)
-        logger.debug("Output origin: {}".format(output_data.GetOrigin()))
-
-        return output_data
-
-    @staticmethod
-    def old_apply_transformations(meta_image, meta_ref_image, composite_transform):
-
-        """
-        :type meta_image: MetaImage
-        :type meta_ref_image: MetaImage
-        :type composite_transform: CompositeTransform
-        """
-
-        input_data = meta_image.get_sitk_image()
-        logger.debug("Input origin: {}".format(input_data.GetOrigin()))
-
-        affine_composite = composite_transform.affine_composite
-        if affine_composite is not None:
-            out_direction = tuple(Affine.get_direction_matrix_from_itk_affine(affine_composite.GetInverse()).flatten())
-            logger.debug("Output direction: {}".format(out_direction))
-        else:
-            out_origin = input_data.GetOrigin()
-            out_direction = input_data.GetDirection()
-
-        # ref_data = meta_ref_image.get_sitk_image()
-        ref_data = sitk.ReadImage(
-            '/home/sbednarek/DEV/lsfm_schema/lsfm_image_server/results/04_new_avrgt_25_right_hemisphere.nii')
-        # ref_data = sitk.ReadImage('/home/sbednarek/DEV/lsfm_schema/lsfm_image_server/results/_cfos_25um.nii.gz')
-        # ref_data = sitk.ReadImage('/home/sbednarek/DEV/lsfm/results/cfos/cfos_autofluo25um.nii.gz')
-
-        scale_factors = np.array(ref_data.GetSpacing()) / np.array(input_data.GetSpacing())
-        logger.debug("Scale factors from ref image: {}".format(scale_factors))
-
-        output_size = np.int16(np.floor(np.array(ref_data.GetSize()) * scale_factors))
-
-        logger.debug("Size from ref image: {}".format(output_size))
-
-        resampler = sitk.ResampleImageFilter()
-        resampler.SetInterpolator(meta_image.sitk_data.interpolation_type)
-        resampler.SetDefaultPixelValue(0)
-        resampler.SetTransform(composite_transform.composite)
-        resampler.SetSize((map(int, output_size)))
-        resampler.SetOutputDirection(input_data.GetDirection())
-        resampler.SetOutputSpacing(input_data.GetSpacing())
-        resampler.SetOutputOrigin(ref_data.GetOrigin())
-
-        # resampler.SetReferenceImage(ref_data)
-
-        output_data = resampler.Execute(input_data)
-        logger.debug("Output origin: {}".format(output_data.GetOrigin()))
-
-        return output_data
 
     @staticmethod
     def resample_sitk(sitk_image, scale_factors, interpolation_type):
@@ -2870,73 +2336,6 @@ class ImageProcessor(object):
 
     @staticmethod
     def resample_image(meta_image, scale_factors, debug=False):
-
-        """
-        :type debug: bool
-        :type scale_factors: numpy.ndarray
-        :type meta_image: MetaImage
-        """
-
-        scale_factors = np.array(scale_factors, dtype=np.float64)
-        sitk_image = meta_image.get_sitk_image()
-
-        logger.debug("Interpolator type: {}".format(meta_image.sitk_data.interpolation_type))
-
-        # input_size = np.array(meta_image.data_shape, dtype=np.float64)
-        input_size = np.array(sitk_image.GetSize(), dtype=np.float64)
-        output_size = np.int16(np.floor(input_size * scale_factors))
-        output_size[0] = int(round(input_size[0] * scale_factors[0]))
-
-        output_spacing = meta_image.voxel_size * input_size
-        output_spacing = output_spacing / output_size
-
-        input_offset = ImageProcessor.compute_offset(sitk_image, meta_image.voxel_size)
-        output_offset = ImageProcessor.compute_offset(sitk_image, output_spacing)
-
-        output_origin = meta_image.origin - input_offset + output_offset
-        output_origin = np.diag(output_origin)
-
-        output_affine = nib.affines.from_matvec(np.diag(output_spacing) * SIGN_RAS_A,
-                                                [0., 0., 0.])
-        output_affine[:3, 3] = output_origin
-
-        logger.debug("Resampling output affine: {}".format(output_affine))
-
-        identity_transform = sitk.AffineTransform(3)
-        sitk_image = sitk.Cast(sitk_image, meta_image.sitk_data.interpolation_pixel)
-
-        logger.debug("Output size: {}".format(output_size))
-
-        resampler = sitk.ResampleImageFilter()
-        resampler.SetInterpolator(meta_image.sitk_data.interpolation_type)
-        resampler.SetDefaultPixelValue(0)
-        resampler.SetTransform(identity_transform)
-        resampler.SetSize((map(int, output_size)))
-        resampler.SetOutputOrigin(tuple(output_origin))
-        resampler.SetOutputSpacing(tuple(output_spacing))
-        resampler.SetOutputDirection(meta_image.direction)
-
-        if debug:
-            resampler.DebugOn()
-
-        output_image = resampler.Execute(sitk_image)
-        output_image = sitk.Cast(output_image, meta_image.pixel_type)
-
-        # sitk.WriteImage(output_image, '../results/sitk_img.nii.gz')
-
-        output_image = sitk.GetArrayFromImage(output_image)
-        output_image = output_image.transpose(meta_image.transpose)
-
-        out_meta_image = MetaImage(output_image, output_affine, meta_image.pixel_type,
-                                   meta_image.direction, meta_image.is_segmentation)
-
-        # return MetaImage(output_image, output_affine, meta_image.pixel_type,
-        #                 meta_image.direction, meta_image.is_segmentation)
-
-        return out_meta_image
-
-    @staticmethod
-    def prev_resample_image(meta_image, scale_factors, debug=False):
 
         """
         :type debug: bool
