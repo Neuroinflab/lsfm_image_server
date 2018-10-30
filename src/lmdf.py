@@ -679,7 +679,8 @@ class LightMicroscopyHDF(object):
                                                            chunks=pyramid_level.chunks,
                                                            dtype=channel.image.data_type,
                                                            compression='gzip',
-                                                           compression_opts=6)
+                                                           compression_opts=6,
+                                                           shuffle=True)
                     data_sets.append(data_set)
                 except RuntimeError:
                     logger.error("Dataset probably already present in file", exc_info=True)
