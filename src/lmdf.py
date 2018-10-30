@@ -544,8 +544,7 @@ def logging_decor(func):
         str_options = '\n'.join("%s=%r" % (key, val) for (key, val) in options.iteritems())
 
         with open('/proc/{}/cmdline'.format(os.getpid())) as c:
-            str_options = '\n'.join([str_options, "cmdline={}".format(' '.join(c.read().split(b'\x00'))
-)])
+            str_options = '\n'.join([str_options, "cmdline={}".format(' '.join(c.read().split(b'\x00')))])
 
         str_options = np.string_(str_options)
         self.log_operation(func.__name__, str_options)
@@ -833,7 +832,7 @@ class Affine(object):
 
     @staticmethod
     def compute_offset(matrix, center, translation):
-        '''
+        """
         Computes translation vector relative to center of rotation
 
         Parameters
@@ -854,7 +853,8 @@ class Affine(object):
         based on:
            https://github.com/hinerm/ITK/blob/master/Modules/Core/Transform/
            include/itkMatrixOffsetTransformBase.hxx
-        '''
+        """
+
         offset = translation + center
         offset -= matrix.dot(center)
         return offset
@@ -950,7 +950,6 @@ class ImageExporter(object):
         self.end_os_mm = np.array(self.export_cmd.phys_origin) + \
                          np.array(self.export_cmd.phys_size) * np.array([1, 1, -1.])
 
-        #self.start_is_mm = self.ct.composite.TransformPoint(self.start_os_mm)
         self.start_is_mm = np.abs(self.ct.composite.TransformPoint(self.start_os_mm)) * np.array([1, 1, -1.])
         self.start_index = np.abs(np.around(self.affine_pv.TransformPoint(self.start_is_mm)).astype(np.int))
 
@@ -2158,13 +2157,13 @@ class ImageProcessor(object):
         m_size = np.array(size) + (2 * margin)
 
         if np.any(m_index < 0):
-            print "margin for segmentation reduced at index, YOU ARE ON THE EDGE"
+            logger.debug("margin for segmentation reduced at index, YOU ARE ON THE EDGE")
             m_index[np.argwhere(m_index < 0)] = 0
             reduce_size = np.array(index) - m_index
             m_size -= reduce_size
 
         if np.any((m_index + m_size) > img_size):
-            print "margin for segmentation reduced at upper bound, YOU ARE ON THE EDGE"
+            logger.debug("margin for segmentation reduced at upper bound, YOU ARE ON THE EDGE")
             out_of_bounds = np.argwhere((m_index + m_size) > img_size)
             m_size[out_of_bounds] = img_size[out_of_bounds]
 
@@ -2200,7 +2199,6 @@ class ImageProcessor(object):
         labels = resample_filter.Execute(labels)
 
         # trim image to bounding box around selected region in segmentation
-        # TODO: furher optimize this to send a chunk of image to this function
         img = ImageProcessor.trim_image_to_label_region(img, labels, reg_id, margin=margin)
         # trim segmentation to some reasonable bounding box
         labels = ImageProcessor.trim_image_to_label_region(labels, labels, reg_id, margin=margin)
