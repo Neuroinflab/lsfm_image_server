@@ -680,7 +680,8 @@ class LightMicroscopyHDF(object):
                                                            dtype=channel.image.data_type,
                                                            compression='gzip',
                                                            compression_opts=6,
-                                                           shuffle=True)
+                                                           shuffle=True,
+                                                           fletcher32=True)
                     data_sets.append(data_set)
                 except RuntimeError:
                     logger.error("Dataset probably already present in file", exc_info=True)
