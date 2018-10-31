@@ -18,7 +18,13 @@ import nibabel as nib
 import SimpleITK as sitk
 import datetime as dt
 
+import bdv
+import image
+import export
+import transforms
+import processing
 import dump_metadata as dm
+import constants as const
 
 from utils import PathUtil
 from utils import InputImageType
@@ -30,503 +36,6 @@ import logging
 
 logging.basicConfig(level=logging.ERROR)
 logger = logging.getLogger(__name__)
-
-M_ORIGIN = 'origin'
-M_SHAPE = 'shape'
-M_VOXEL_SIZE = 'spacing'
-
-RAS_INVERSE_DIRECTION = np.array([-1, -1, 1])
-RAS_DIRECTION = np.array([1, 1, -1])
-
-INVERSE_AFFINE_SIGN = np.array([[1, 1, -1, -1],
-                                [1, 1, -1, -1],
-                                [-1, -1, 1, 1],
-                                [1, 1, 1, 1]])
-
-SIGN_LPI_RAS_T = np.array([1, 1, -1])
-SIGN_LPI_RAS_A = np.array([[-1, 1, -1], [1, -1, -1], [1, 1, -1]])
-
-SIGN_RAS_T = np.array([-1, -1, -1])
-SIGN_RAS_A = np.array([[-1, 1, -1],
-                       [1, -1, -1],
-                       [1, 1, -1]])
-DIRECTION_RAS = (1.0, 0.0, 0.0,
-                 0.0, 1.0, 0.0,
-                 0.0, 0.0, -1.0)
-
-SIGN_LPI_T = np.array([-1, -1, 1])
-SIGN_LPI_A = np.array([[1, 1, -1], [1, 1, -1], [-1, -1, 1]])
-DIRECTION_LPI = (-1.0, 0.0, 0.0,
-                 0.0, -1.0, 0.0,
-                 0.0, 0.0, 1.0)
-
-TransformTuple = namedtuple('TransformTuple', 'order name type invert')
-
-
-class ImageProxy(object):
-    def __init__(self,
-                 channel_name,
-                 specimen_id,
-                 multifile_prefix,
-                 metadata,
-                 xml_file_name,
-                 RAM_limit,
-                 orientation='RAS',
-                 is_multichannel=False,
-                 is_segmentation=False):
-
-        self.channel_name = channel_name
-        self.xml_file_name = xml_file_name
-        self.specimen_id = specimen_id
-        self.multifile_prefix = multifile_prefix
-        self.metadata = metadata
-        self.RAM_limit = RAM_limit
-        self.is_multichannel = is_multichannel
-        self.is_segmentation = is_segmentation
-        self.orientation = orientation
-
-        self.pixel_type = self._get_pixel_type()
-        self.direction = (-1.0, 0.0, 0.0,
-                          0.0, -1.0, 0.0,
-                          0.0, 0.0, 1.0)
-
-        self.is_stream = False
-        self.is_nifti = False
-
-        self.data_shape = None
-        self.voxel_size = None
-
-    @property
-    def nifti_affine(self):
-        return None
-
-    @property
-    def nifti_header(self):
-        return None
-
-    @property
-    def stack_size(self):
-        return None
-
-    @property
-    def stack_shape(self):
-        return None
-
-    @property
-    def overhead_stack_shape(self):
-        return None
-
-    @property
-    def image_shape(self):
-        return self.data_shape[:3]
-
-    @property
-    def data_type(self):
-        if self.metadata.bits_per_sample == 16:
-            return np.int16
-        elif self.metadata.bits_per_sample == 8:
-            return np.int8
-        else:
-            raise ValueError("Unknown data type")
-
-    @property
-    def plane_size(self):
-        return self.data_shape[1] * self.data_shape[2] * self.metadata.bits_per_sample / 8. / (1000 ** 3)
-
-    @property
-    def size(self):
-        return self.plane_size * self.data_shape[0]
-
-    @property
-    def affine(self):
-        return np.eye(4, 4) * np.hstack([self.voxel_size, [1.]])
-
-    @property
-    def num_of_stacks(self):
-        if self.is_stream and self.stack_size < self.data_shape[0]:
-            return self.data_shape[0] // self.stack_size
-        else:
-            return 1
-
-    @property
-    def interpolation_type(self):
-        if self.is_segmentation:
-            return sitk.sitkNearestNeighbor
-        else:
-            return sitk.sitkLinear
-
-    @property
-    def cast_interpolation_type(self):
-        if self.is_segmentation:
-            return sitk.sitkUInt16
-        elif self.is_multichannel:
-            return sitk.sitkVectorFloat32
-        else:
-            return sitk.sitkFloat32
-
-    @property
-    def cast_output_type(self):
-        if self.is_segmentation:
-            return sitk.sitkUInt16
-        elif self.is_multichannel:
-            return sitk.sitkVectorUInt16
-        else:
-            return sitk.sitkUInt16
-
-    def _read_image(self, img_path):
-        raise NotImplementedError
-
-    def stream_data(self):
-        raise NotImplementedError
-
-    def _get_pixel_type(self):
-        '''image_io = itk.ImageIOFactory.CreateImageIO(str(self.metadata.file_path),
-                                                    itk.ImageIOFactory.ReadMode)
-        image_io.SetFileName(str(self.metadata.file_path))
-        return image_io.GetPixelType()'''
-        if self.is_segmentation:
-            return sitk.sitkUInt16
-
-        if self.is_multichannel:
-            return sitk.__getattribute__('sitkVectorFloat' + str(self.metadata.bits_per_sample))
-
-        return sitk.__getattribute__('sitkUInt' + str(self.metadata.bits_per_sample))
-
-    def _get_sitk_pixel_type(self):
-        image_io = sitk.ReadImage(str(self.metadata.file_path))
-        return image_io.GetPixelID()
-
-    def _get_transpose(self):
-        target_space = np.array(list('RAS'))
-        reverse_axes_dict = dict(zip('RASLPI', 'LPIRAS'))
-        source_space = np.array(list(self.orientation))
-
-        transpose = []
-        flip = []
-        for i, letter in enumerate(target_space):
-            if letter == source_space[i]:
-                transpose.append(i)
-            elif letter == reverse_axes_dict[source_space[i]]:
-                transpose.append(i)
-            else:
-                if letter in source_space:
-                    to = np.argwhere(letter == source_space)[0][0]
-                    transpose.append(to)
-                else:
-                    reverse_source_space = np.array([reverse_axes_dict[l] for l in source_space])
-                    to = np.argwhere(letter == reverse_source_space)[0][0]
-                    transpose.append(to)
-
-        source_space = source_space[transpose]
-
-        for i, letter in enumerate(source_space):
-            if letter == target_space[i]:
-                flip.append(1)
-            elif letter == reverse_axes_dict[target_space[i]]:
-                flip.append(-1)
-            else:
-                logger.debug("Something went wrong with reorienting RAI codes")
-
-        return np.array(transpose), np.array(flip)
-
-    def __repr__(self):
-        return "The plane size is: {:.2f} GB, \nThe whole size is: {:.2f} GB" \
-               "\nStack size is: {} planes \nIs stream: {} \nAffine: \n{}\n" \
-               "Pixel type: {}\n".format(self.plane_size,
-                                         self.size,
-                                         self.stack_size,
-                                         self.is_stream,
-                                         self.affine,
-                                         self.pixel_type)
-
-    @staticmethod
-    def reverse_axes(img_data, reverse=[False, False, False]):
-        if reverse[0]:
-            img_data = img_data[::-1, :, :]
-        if reverse[1]:
-            img_data = img_data[:, ::-1, :]
-        if reverse[2]:
-            img_data = img_data[:, :, ::-1]
-
-        return img_data
-
-    @staticmethod
-    def get_available_ram():
-        assert os.name == 'posix'
-        available_ram = float(os.popen("free -m").readlines()[1].split()[-1]) / 1000.
-        logger.debug("Available RAM: {:.2f}".format(available_ram))
-        return available_ram
-
-    @staticmethod
-    def get_image_proxy_class(meta):
-        """
-
-        :type meta: dm.ImageMetaData
-        """
-        logger.debug(meta.file_type)
-        if meta.file_type == InputImageType.MultipleTiff.name:
-            return StreamableTiffProxy
-        elif meta.file_type == InputImageType.OmeTiff.name:
-            return StreamableOMEProxy
-        elif meta.file_type == InputImageType.Nifti.name:
-            return NiftiProxy
-        elif meta.file_type == InputImageType.ImageJTiff.name or meta.file_type == InputImageType.Tiff.name:
-            return NonStreamableTiffProxy
-
-        else:
-            raise ValueError("Unsupported file format specified in image metadata")
-
-
-class StreamableTiffProxy(ImageProxy):
-    """
-    This is currently implemented for multifile tiff data, _read_image and
-    stream_data methods need to be reimplemented for other file types, or for single
-    file OME Tiff.
-    """
-
-    def __init__(self, *args, **kwargs):
-
-        super(StreamableTiffProxy, self).__init__(*args, **kwargs)
-
-        try:
-            self.voxel_size = np.array([self.metadata.voxel_size_z,
-                                        self.metadata.voxel_size_y,
-                                        self.metadata.voxel_size_x], dtype=np.float64)
-
-            self.data_shape = np.array([self.metadata.image_size_z,
-                                        self.metadata.image_size_y,
-                                        self.metadata.image_size_x], dtype=np.int32)
-
-            self.file_dir, self.file_name = os.path.split(self.metadata.file_path)
-
-        except AttributeError:
-            logger.error("Attribute not found in metadata object", exc_info=True)
-            raise
-
-        self.is_stream = True
-
-    @property
-    def pattern(self):
-        return os.path.join(self.file_dir, self.multifile_prefix)
-
-    @property
-    def stack_size(self):
-        stack_size = int(self.RAM_limit // self.plane_size)
-        if stack_size > self.data_shape[0]:
-            return self.data_shape[0]
-        else:
-            return stack_size
-
-    @property
-    def origin(self):
-        return np.array([0., 0., 0.])
-
-    @property
-    def stack_shape(self):
-
-        return np.array([self.stack_size, self.data_shape[1], self.data_shape[2]],
-                        dtype=np.uint16)
-
-    @property
-    def overhead_stack_shape(self):
-        return np.array([self.data_shape[0] - (self.stack_size * self.num_of_stacks),
-                         self.data_shape[1],
-                         self.data_shape[2]],
-                        dtype=np.uint16)
-
-    def _craft_img_path(self, idx):
-        return self.pattern % idx
-
-    def _read_image(self, img_path):
-        return tf.imread(img_path, key=0)
-
-    def stream_data(self):
-        assert ImageProxy.get_available_ram() > self.stack_size * self.plane_size
-
-        current_idx = 0
-        while current_idx < self.data_shape[0]:
-            logger.debug("Current streaming index: {}".format(current_idx))
-            if current_idx + self.stack_size < self.data_shape[0]:
-                next_indices = np.arange(current_idx, current_idx + self.stack_size)
-            else:
-                next_indices = np.arange(current_idx, self.data_shape[0])
-            try:
-                logger.debug("Next stream slice: {}".format(next_indices))
-                data = self._read_image(self._craft_img_path(next_indices[0]))
-                for idx in tqdm.tqdm(next_indices[1:]):
-                    next_data = self._read_image(self._craft_img_path(idx))
-                    data = np.dstack(([data, next_data]))
-            except IOError:
-                logger.error("Could not open file", exc_info=True)
-                raise
-
-            current_idx = current_idx + self.stack_size
-
-            yield data.transpose(2, 0, 1)
-
-    def __repr__(self):
-        return "The plane size is: {:.2f} GB, \nThe whole size is: {:.2f} GB" \
-               "\nStack size is: {} planes \nIs stream: {} \nAffine: \n{}" \
-               "Stack shape: {}\n Overhead stack shape: {}\n".format(self.plane_size,
-                                                                     self.size,
-                                                                     self.stack_size,
-                                                                     self.is_stream,
-                                                                     self.affine,
-                                                                     self.stack_shape,
-                                                                     self.overhead_stack_shape)
-
-
-class StreamableOMEProxy(StreamableTiffProxy):
-    def __init__(self, *args, **kwargs):
-
-        super(StreamableOMEProxy, self).__init__(*args, **kwargs)
-
-        try:
-            self.voxel_size = np.array([self.metadata.voxel_size_z,
-                                        self.metadata.voxel_size_y,
-                                        self.metadata.voxel_size_x], dtype=np.float64)
-
-            self.data_shape = np.array([self.metadata.image_size_z,
-                                        self.metadata.image_size_y,
-                                        self.metadata.image_size_x], dtype=np.int32)
-
-            self.file_dir, self.file_name = os.path.split(self.metadata.file_path)
-
-        except AttributeError:
-            logger.error("Attribute not found in metadata object", exc_info=True)
-            raise
-
-    @property
-    def pattern(self):
-        return None
-
-    def _read_image(self, img_path):
-        return tf.TiffFile(img_path)
-
-    def stream_data(self):
-        assert ImageProxy.get_available_ram() > self.stack_size * self.plane_size
-
-        try:
-            tiff_file = self._read_image(self.metadata.file_path)
-        except IOError:
-            logger.error("Could not open OME file.", exc_info=True)
-            raise
-
-        current_idx = 0
-        while current_idx < self.data_shape[0]:
-            next_indices = slice(current_idx, current_idx + self.stack_size)
-            if current_idx + self.stack_size > self.data_shape[0]:
-                next_indices = slice(current_idx, current_idx + self.overhead_stack_shape[0])
-            data = tiff_file.asarray(next_indices, 0)[:next_indices.stop - next_indices.start]
-            current_idx += self.stack_size
-            yield data
-
-
-class NonStreamableTiffProxy(ImageProxy):
-    def __init__(self, *args, **kwargs):
-
-        super(NonStreamableTiffProxy, self).__init__(*args, **kwargs)
-
-        try:
-            self.voxel_size = np.array([self.metadata.voxel_size_z,
-                                        self.metadata.voxel_size_y,
-                                        self.metadata.voxel_size_x], dtype=np.float64)
-
-            self.data_shape = np.array([self.metadata.image_size_z,
-                                        self.metadata.image_size_y,
-                                        self.metadata.image_size_x], dtype=np.int32)
-
-            self.file_dir, self.file_name = os.path.split(self.metadata.file_path)
-
-        except AttributeError:
-            logger.error("Attribute not found in metadata object", exc_info=True)
-            raise
-
-        self.is_stream = False
-
-        try:
-            self.image = self._read_image(self.metadata.file_path)
-        except IOError:
-            logger.error("Could not open file", exc_info=True)
-            raise
-
-    @property
-    def stack_size(self):
-        return self.data_shape[0]
-
-    def _read_image(self, img_path):
-        return tf.TiffFile(img_path)
-
-    def stream_data(self):
-        assert ImageProxy.get_available_ram() > self.size * 2
-        data = [self.image.asarray()]
-        return data
-
-
-class NiftiProxy(ImageProxy):
-    def __init__(self, *args, **kwargs):
-
-        super(NiftiProxy, self).__init__(*args, **kwargs)
-
-        try:
-            self.voxel_size = np.array([self.metadata.voxel_size_x,
-                                        self.metadata.voxel_size_y,
-                                        self.metadata.voxel_size_z], dtype=np.float64)
-
-            self.data_shape = np.array([self.metadata.image_size_x,
-                                        self.metadata.image_size_y,
-                                        self.metadata.image_size_z], dtype=np.int32)
-
-            self.file_dir, self.file_name = os.path.split(self.metadata.file_path)
-        except AttributeError:
-            logger.error("Attribute not found in metadata object", exc_info=True)
-            raise
-
-        self.is_stream = False
-        self.is_nifti = True
-
-        try:
-            self.image = self._read_image(self.metadata.file_path)
-        except IOError:
-            logger.error("Could not open file", exc_info=True)
-            raise
-
-        assert ImageProxy.get_available_ram() > self.size
-        self.data = self.image.get_data()
-        if len(self.data.shape) == 5:
-            self.data = self.data[:, :, :, 0, :]
-
-        self.data_shape = np.array(self.data.shape)
-
-        logger.debug("Pixel type for channel {}: {}".format(self.channel_name, self.pixel_type))
-
-    @property
-    def stack_size(self):
-        return self.data_shape[0]
-
-    @property
-    def nifti_affine(self):
-        return self.image.affine
-
-    @property
-    def nifti_header(self):
-        return self.image.header
-
-    @property
-    def data_type(self):
-        return self.data.dtype
-
-    @property
-    def affine(self):
-        affine = self.image.affine
-        affine[:3, 3] *= np.array([-1, -1, 1])
-        return affine
-
-    def _read_image(self, img_path):
-        return nib.load(img_path)
-
-    def stream_data(self):
-        return [self.data]
 
 
 def logging_decor(func):
@@ -571,7 +80,7 @@ class LightMicroscopyHDF(object):
                 raise
 
         self.root = self.h5_file['/']
-        self.bdv = BigDataViewer(h5_file=self.h5_file)
+        self.bdv = bdv.BigDataViewer(h5_file=self.h5_file)
 
         if self.number_of_channels is None:
             self.root.attrs['LSFM_setups_count'] = 0
@@ -705,7 +214,7 @@ class LightMicroscopyHDF(object):
 
             data_idx = 0
             for data in _channel.image.stream_data():
-                meta_image = MetaImage.meta_image_from_channel(data, _channel)
+                meta_image = image.MetaImage.meta_image_from_channel(data, _channel)
                 if _channel.image.is_stream:
                     logger.debug("Processing data : {}/{}".format(data_idx + 1,
                                                                   _channel.image.num_of_stacks))
@@ -727,7 +236,7 @@ class LightMicroscopyHDF(object):
                         # scale_factors = _channel.resolutions[level_num - 1] / _channel.resolutions[level_num]
                         scale_factors = _channel.relative_resolution_scales[level_num][:len(_channel.image.image_shape)]
                         logger.debug("Scale factors for resampling: {}".format(scale_factors))
-                        meta_image = ImageProcessor.resample_image(meta_image, scale_factors)
+                        meta_image = processing.resample_image(meta_image, scale_factors)
                         writing_slice = slice(0, None)
 
                         if _channel.image.is_stream:
@@ -799,236 +308,6 @@ class LightMicroscopyHDF(object):
         self.channels[image_proxy.channel_name] = HDFChannel(self.h5_file, image_proxy.channel_name)
 
 
-class Affine(object):
-    def __init__(self, affine_name, affine_path=None):
-        if affine_path is not None:
-            try:
-                self.itk_affine = sitk.ReadTransform(affine_path)
-                self.itk_inv_affine = self.itk_affine.GetInverse()
-            except RuntimeError:
-                raise RuntimeError("Affine file format is most likely not compliant"
-                                   "with itk")
-            self.nifti_affine = Affine.get_affine_matrix(affine_path)
-            self.inv_nifti_affine = np.linalg.inv(self.nifti_affine)
-            self.affine_name = affine_name
-
-    def set_affine(self, nifti_affine, itk_params, itk_fixed_params):
-        self.nifti_affine = nifti_affine
-        self.inv_nifti_affine = np.linalg.inv(self.nifti_affine)
-        self.itk_affine = sitk.AffineTransform(3)
-        self.itk_affine.SetParameters(itk_params)
-        self.itk_affine.SetFixedParameters(itk_fixed_params)
-        self.itk_inv_affine = self.itk_affine.GetInverse()
-
-    def write_to_itk_file(self, file_path):
-        sitk.WriteTransform(self.itk_affine, file_path)
-
-    def get_direction_matrix(self):
-        voxel_sizes = nib.affines.voxel_sizes(self.nifti_affine)
-        dir_matrix = self.nifti_affine[:3, :3].copy()
-        dir_matrix /= voxel_sizes
-        dir_matrix *= RAS_INVERSE_DIRECTION[:, np.newaxis]
-        return dir_matrix
-
-    @staticmethod
-    def compute_offset(matrix, center, translation):
-        """
-        Computes translation vector relative to center of rotation
-
-        Parameters
-        ----------
-        param matrix: 3D affine matrix
-        type matrix: np.ndarray of float, (3, 3)
-
-        param center: 3D vector defining center of rotation
-        type center: ndarray of float, (3,)
-
-        param translation: original 3D translation vector
-        type translation: ndarray of float (3,)
-
-        Returns
-        -------
-        rtype: ndarray of float (3,)
-
-        based on:
-           https://github.com/hinerm/ITK/blob/master/Modules/Core/Transform/
-           include/itkMatrixOffsetTransformBase.hxx
-        """
-
-        offset = translation + center
-        offset -= matrix.dot(center)
-        return offset
-
-    @staticmethod
-    def get_affine_matrix(fname):
-        '''
-        Reads from a file an itk matrix defining affine transformation and converts
-        it to a nifti-compatible format
-
-        Parameters
-        ----------
-        param fname: file name (txt)
-        type fname: str
-
-        Returns
-        -------
-        rtype: ndarray of float (4, 4)
-        '''
-        transform = sitk.ReadTransform(fname)
-
-        params = np.array(transform.GetParameters())
-        affine = params[:9].reshape(3, 3)
-        translation = params[9:]
-
-        center = np.array(transform.GetFixedParameters())
-        translation = Affine.compute_offset(affine, center, translation)
-        translation = translation.reshape(-1, 1) * [[-1], [-1], [1]]
-        sign_flip = np.array([[1, 1, -1], [1, 1, -1], [-1, -1, 1]])
-        affine *= sign_flip
-
-        return np.vstack([np.hstack([affine, translation]),
-                          [0., 0., 0., 1.]])
-
-    @staticmethod
-    def get_direction_matrix_from_itk_affine(itk_affine):
-
-        params = np.array(itk_affine.GetParameters())
-        affine = params[:9].reshape(3, 3)
-        translation = params[9:]
-        center = np.array(itk_affine.GetFixedParameters())
-        translation = Affine.compute_offset(affine, center, translation)
-
-        affine = nib.affines.from_matvec(affine, translation)
-
-        voxel_sizes = nib.affines.voxel_sizes(affine)
-        dir_matrix = affine[:3, :3].copy()
-        dir_matrix /= voxel_sizes
-        # dir_matrix *= INVERSE_AFFINE_SIGN[:3, :3]
-        # dir_matrix *= RAS_DIRECTION[:, np.newaxis]
-        return dir_matrix
-
-    def __repr__(self):
-        return "affine: {}".format(self.affine_name)
-
-
-TransposeTuple = namedtuple('TransposeTuple', 'transpose, flip, inv_transpose, inv_flip,'
-                            'ltranspose, lflip, linv_transpose, linv_flip')
-
-
-class ImageExporter(object):
-    def __init__(self, export_cmd, pyramid_level):
-        """
-        :type pyramid_level:
-        :type export_cmd: ExportCmd
-        :param export_cmd:
-        :param pyramid_level:
-        """
-        self.export_cmd = export_cmd
-        self.pyramid_level = pyramid_level
-
-        self.transpose_tuple = TransposeTuple(*self.get_axes_transpose(ndim=len(self.pyramid_level.shape)))
-        self.shape = np.array(pyramid_level.shape)[self.transpose_tuple.transpose]
-        self.origin = np.abs(np.array(pyramid_level.origin[self.transpose_tuple.transpose])) * np.array([1, 1, -1.])
-        self.voxel_size = np.array(pyramid_level.voxel_size[self.transpose_tuple.transpose])
-        self.affine_vp, self.affine_pv = ImageProcessor.get_affines(self.voxel_size,
-                                                                    self.origin)
-        self.ct = CompositeTransform(self.export_cmd.list_of_transforms)
-
-    def get_axes_transpose(self, ndim=3):
-        transpose, flip = np.arange(ndim), np.ones(ndim)
-        inv_transpose, inv_flip = np.arange(ndim), np.ones(ndim)
-        transpose[:3], flip[:3] = ImageProcessor.get_transpose(self.export_cmd.input_orientation)
-        inv_transpose[:3] = np.argsort(transpose[:3])
-        inv_flip[:3] = flip[inv_transpose[:3]] < 0
-
-        return transpose[:3], flip[:3], inv_transpose[:3], inv_flip[:3], transpose, flip, inv_transpose, inv_flip
-
-    def _compute_indices(self):
-
-        self.start_os_mm = self.export_cmd.phys_origin
-        self.chunk_size_in_voxels = (self.export_cmd.phys_size // self.voxel_size).astype(np.int)
-        self.end_os_mm = np.array(self.export_cmd.phys_origin) + \
-                         np.array(self.export_cmd.phys_size) * np.array([1, 1, -1.])
-
-        self.start_is_mm = np.abs(self.ct.composite.TransformPoint(self.start_os_mm)) * np.array([1, 1, -1.])
-        self.start_index = np.abs(np.around(self.affine_pv.TransformPoint(self.start_is_mm)).astype(np.int))
-
-        self.end_index = self.start_index + self.chunk_size_in_voxels
-        self.start_index = np.array(self.start_index)[self.transpose_tuple.inv_transpose]
-        self.end_index = np.array(self.end_index)[self.transpose_tuple.inv_transpose]
-
-    def _prepare_chunk(self):
-        self.chunk = self.pyramid_level.get_level_chunk_data(self.start_index, self.end_index,
-                                                             self.transpose_tuple.inv_flip)
-
-    def _transpose_chunk(self):
-
-        self.chunk = self.chunk.transpose(self.transpose_tuple.ltranspose)
-        self.chunk = ImageProcessor.reverse_axes(self.chunk, self.transpose_tuple.flip < 0)
-
-    def _resample_chunk(self):
-
-        logger.debug("_resample_chunk START_IS_MM {}".format(self.start_is_mm))
-
-        self.chunk_affine = nib.affines.from_matvec(np.diag(self.voxel_size) * SIGN_RAS_A, self.start_is_mm)
-        self.meta_image = MetaImage(self.chunk, self.chunk_affine,
-                                    self.pyramid_level.pixel_type,
-                                    DIRECTION_RAS,
-                                    self.pyramid_level.is_segmentation,
-                                    self.pyramid_level.is_nifti)
-
-        if self.export_cmd.resample_image:
-            self.scale_factors = self.voxel_size / self.export_cmd.output_resolution
-        else:
-            self.scale_factors = np.array([1., 1., 1.])
-
-        self.meta_image = ImageProcessor.resample_image(self.meta_image, self.scale_factors)
-
-    def _transform_chunk(self):
-
-        self.chunk = ImageProcessor.apply_transformations(self.meta_image, self.ct)
-
-    def process(self):
-        self._compute_indices()
-        self._prepare_chunk()
-        self._transpose_chunk()
-        self._resample_chunk()
-        self._transform_chunk()
-
-        return self.chunk
-
-
-class ImageRegionExporter(ImageExporter):
-
-    def _compute_indices(self):
-        self.start, self.end = ImageProcessor.get_bounding_box(self.export_cmd.segmentation,
-                                                               self.export_cmd.region_id)
-
-        self.start_is_mm = self.export_cmd.segmentation.TransformIndexToPhysicalPoint(self.start)
-        self.end_is_mm = self.export_cmd.segmentation.TransformIndexToPhysicalPoint(self.end)
-        self.start_index = np.abs(np.around(self.affine_pv.TransformPoint(self.start_is_mm)).astype(np.int))
-        self.end_index = np.abs(np.around(self.affine_pv.TransformPoint(self.end_is_mm)).astype(np.int))
-        self.start_index = np.array(self.start_index)[self.transpose_tuple.inv_transpose]
-        self.end_index = np.array(self.end_index)[self.transpose_tuple.inv_transpose]
-
-
-class ImageWholeExporter(ImageExporter):
-
-    def _compute_indices(self):
-        if self.export_cmd.phys_origin is not None:
-            self.start_os_mm = self.export_cmd.phys_origin
-            self.start_is_mm = self.ct.composite.TransformPoint(self.start_os_mm)
-        else:
-            self.start_is_mm = self.origin
-            self.start_os_mm = self.ct.affine_composite.GetInverse().TransformPoint(self.start_is_mm)
-
-        self.start_index = np.abs(np.around(self.affine_pv.TransformPoint(self.start_is_mm)).astype(np.int))
-        self.chunk_size_in_voxels = self.shape
-        self.end_index = self.start_index + self.chunk_size_in_voxels
-        self.start_index = np.array(self.start_index)[self.transpose_tuple.inv_transpose]
-        self.end_index = np.array(self.end_index)[self.transpose_tuple.inv_transpose]
-
-
 class HDFChannel(object):
     def __init__(self, h5_file, channel_name, orientation='RAI'):
 
@@ -1042,9 +321,9 @@ class HDFChannel(object):
 
         self.pyramid_levels = []
         self.image_node = self.h5_file[self.image_path]
-        self.p_origins = self._get_image_meta_data(M_ORIGIN)
-        self.p_shapes = self._get_image_meta_data(M_SHAPE)
-        self.p_voxel_sizes = self._get_image_meta_data(M_VOXEL_SIZE)
+        self.p_origins = self._get_image_meta_data(const.M_ORIGIN)
+        self.p_shapes = self._get_image_meta_data(const.M_SHAPE)
+        self.p_voxel_sizes = self._get_image_meta_data(const.M_VOXEL_SIZE)
         self.n_levels = len(self.p_shapes)
         try:
             self.is_multichannel = bool(int(self._get_image_meta_data('is_multichannel')))
@@ -1097,7 +376,7 @@ class HDFChannel(object):
     @logging_decor
     def write_affine(self, affine_name, affine_file_path):
         # type: (str, str) -> None
-        affine = Affine(affine_path=affine_file_path, affine_name=affine_name)
+        affine = transforms.Affine(affine_path=affine_file_path, affine_name=affine_name)
         affine_path = PathUtil.get_lsfm_affine_path(self.channel_name, affine_name)
         affine_itk_path = PathUtil.get_lsfm_affine_itk_path(self.channel_name, affine_name)
 
@@ -1115,7 +394,7 @@ class HDFChannel(object):
         :type affine_name: str
         :rtype :Affine
         """
-        affine = Affine(affine_name=affine_name)
+        affine = transforms.Affine(affine_name=affine_name)
         affine_path = PathUtil.get_lsfm_affine_path(self.channel_name, affine_name)
         affine_itk_path = PathUtil.get_lsfm_affine_itk_path(self.channel_name, affine_name)
 
@@ -1141,7 +420,7 @@ class HDFChannel(object):
             sys.exit()
 
         df_level = df_channel.pyramid_levels[0]
-        cmd = ExportCmd(None, None, None, 'RAS', 0, [], None, None, None, None, None, None)
+        cmd = export.ExportCmd(None, None, None, 'RAS', 0, [], None, None, None, None, None, None)
         df = df_level.get_meta_image(cmd)
         df = sitk.Cast(df, sitk.sitkVectorFloat64)
         dft = sitk.DisplacementFieldTransform(df)
@@ -1155,7 +434,7 @@ class HDFChannel(object):
             sys.exit()
 
         seg_level = seg_channel.pyramid_levels[0]
-        cmd = ExportCmd(None, None, None, 'RAS', 0, [], None, None, None, None, None, None)
+        cmd = export.ExportCmd(None, None, None, 'RAS', 0, [], None, None, None, None, None, None)
         seg = seg_level.get_meta_image(cmd)
         seg = sitk.Cast(seg, sitk.sitkInt16)
         return seg
@@ -1169,7 +448,7 @@ class HDFChannel(object):
 
         ref_channel_level = ref_channel.pyramid_levels[0]
         ref_channel_level.is_nifti = True
-        cmd = ExportCmd(None, None, None, 'RAS', 0, [], None, None, None, None, None, None)
+        cmd = export.ExportCmd(None, None, None, 'RAS', 0, [], None, None, None, None, None, None)
         ref_meta_image = ref_channel_level.get_meta_image(cmd)
         return ref_meta_image
 
@@ -1185,7 +464,7 @@ class HDFChannel(object):
             raise NotImplementedError
 
     def process_transforms(self, list_of_transforms):
-        transforms = []
+        _transforms = []
         for transform_tuple in list_of_transforms:
             if transform_tuple.type == 'affine':
                 affine = self.read_affine(transform_tuple.name)
@@ -1193,18 +472,18 @@ class HDFChannel(object):
                     affine = affine.itk_inv_affine
                 else:
                     affine = affine.itk_affine
-                transform = Transform(transform_tuple.type, transform_tuple.order,
-                                      transform_tuple.name, affine)
-                transforms.append(transform)
+                transform = transforms.Transform(transform_tuple.type, transform_tuple.order,
+                                                 transform_tuple.name, affine)
+                _transforms.append(transform)
             elif transform_tuple.type == 'df':
                 df = self.read_displacement_field(transform_tuple.name)
-                transform = Transform(transform_tuple.type, transform_tuple.order,
-                                      transform_tuple.name, df)
-                transforms.append(transform)
+                transform = transforms.Transform(transform_tuple.type, transform_tuple.order,
+                                                 transform_tuple.name, df)
+                _transforms.append(transform)
             else:
                 raise NotImplementedError("Wrong transformation type")
 
-        return transforms
+        return _transforms
 
     def export_grid_of_chunks(self, export_cmd, level):
         """
@@ -1215,7 +494,7 @@ class HDFChannel(object):
         """
         def get_whole_image_grid():
             logger.debug("Exporting whole image as chunks")
-            transpose, flip = ImageProcessor.get_transpose(export_cmd.input_orientation)
+            transpose, flip = processing.get_transpose(export_cmd.input_orientation)
             whole_phys_size = self.pyramid_levels[level].physical_size[transpose]
             grid_size = np.ceil(whole_phys_size / (export_cmd.phys_size - export_cmd.overlap_mm))
             grid_size = grid_size.astype(np.int32)
@@ -1387,7 +666,7 @@ class HDFChannel(object):
             :return:
             """
             logger.debug("input orientation {}".format(cmd.ref_orientation))
-            transpose, flip = ImageProcessor.get_transpose(cmd.ref_orientation)
+            transpose, flip = processing.get_transpose(cmd.ref_orientation)
             inv_transpose = np.argsort(transpose)
             logger.debug("transpose: {}\n flip: {}".format(transpose, flip))
             target_spacing = cmd.ref_channel.pyramid_levels[cmd.ref_level].voxel_size[transpose]
@@ -1402,7 +681,7 @@ class HDFChannel(object):
             # source_size = self.shape[transpose]
             logger.debug("source image size: {}".format(self.shape))
 
-            cmd_tmp = ExportCmd(None, None, None, 'RAS', 0, [], None, None, None, None)
+            cmd_tmp = export.ExportCmd(None, None, None, 'RAS', 0, [], None, None, None, None)
             seg_meta_image = self.get_meta_image(cmd_tmp)
             seg = seg_meta_image.get_sitk_image()
             seg = sitk.Cast(seg, sitk.sitkInt16)
@@ -1435,7 +714,7 @@ class HDFChannel(object):
                 logger.debug("slab size: {}".format(slab_size))
                 roi_filter.SetIndex(start_index)
                 roi_slab = roi_filter.Execute(seg)
-                resampled_slab = ImageProcessor.resample_sitk(roi_slab, scale_factors, sitk.sitkNearestNeighbor)
+                resampled_slab = processing.resample_sitk(roi_slab, scale_factors, sitk.sitkNearestNeighbor)
                 slab_data = sitk.GetArrayFromImage(resampled_slab)
                 logger.debug("slab shape: {}".format(slab_data.shape))
                 # some_plane = slab_data[:, 5, :]
@@ -1493,7 +772,7 @@ class HDFChannel(object):
                 if not os.path.exists(os.path.dirname(cmd.output_path)):
                     os.makedirs(os.path.dirname(cmd.output_path))
 
-            transpose, flip = ImageProcessor.get_transpose(cmd.input_orientation)
+            transpose, flip = processing.get_transpose(cmd.input_orientation)
             logger.debug("transpose: {}\n flip: {}".format(transpose, flip))
             inv_transpose = np.argsort(transpose)
             logger.debug("inverse transpose: {}".format(inv_transpose))
@@ -1611,12 +890,12 @@ class HDFChannel(object):
         def get_meta_image(self, export_cmd):
 
             if export_cmd.whole_image:
-                img_exp = ImageWholeExporter(export_cmd, self)
+                img_exp = export.ImageWholeExporter(export_cmd, self)
             else:
                 if export_cmd.export_region:
-                    img_exp = ImageRegionExporter(export_cmd, self)
+                    img_exp = export.ImageRegionExporter(export_cmd, self)
                 else:
-                    img_exp = ImageExporter(export_cmd, self)
+                    img_exp = export.ImageExporter(export_cmd, self)
 
             output_img = img_exp.process()
 
@@ -1647,152 +926,6 @@ class HDFChannel(object):
                                                                          self.physical_size[2])
 
 
-class ExportSlicesCmd(object):
-    def __init__(self, channel_name, input_orientation, input_resolution_level, axis,
-                 output_path=None, extract_roi=None, slicing_range=None,
-                 ref_channel=None, ref_level=None, ref_orientation=None):
-
-        if slicing_range is None:
-            slicing_range = [None, None, 1]
-        if extract_roi is None:
-            extract_roi = [None, None, None, None]
-
-        self.axis = axis
-        self.channel_name = channel_name
-        self.start, self.stop, self.step = np.array(slicing_range)
-        self.output_path = output_path
-        if self.output_path:
-            self.output_path, self.output_ext = os.path.splitext(output_path)
-        self.roi_ox, self.roi_oy, self.roi_sx, self.roi_sy = np.array(extract_roi)
-        self.ref_channel = ref_channel
-        self.ref_level = ref_level
-        self.ref_orientation = ref_orientation
-        self.input_orientation = input_orientation
-        self.input_resolution_level = input_resolution_level
-        if self.ref_channel is not None:
-            self.input_orientation = 'RAS'
-
-    @property
-    def resample(self):
-        if self.ref_channel is not None:
-            return True
-
-
-class ExportCmd(object):
-    def __init__(self, channel_name, output_path, output_resolution, input_orientation,
-                 input_resolution_level, list_of_transforms, phys_origin, phys_size,
-                 segmentation_name, region_id, grid_size, overlap_mm):
-        # type: (str, str, list, str, int, list, list, list) -> None
-
-        self.channel_name = channel_name
-        self.output_path = output_path
-        if self.output_path is not None:
-            if not os.path.exists(os.path.dirname(self.output_path)):
-                os.makedirs(os.path.dirname(self.output_path))
-
-        self.output_resolution = output_resolution
-        if output_resolution:
-            if len(output_resolution) != 3:
-                raise ValueError("Wrong shape of output resolution array")
-            self.output_resolution = np.array(output_resolution, np.float64)
-        self.input_orientation = input_orientation
-        self.input_resolution_level = input_resolution_level
-        self.list_of_transforms = list_of_transforms
-        self.phys_origin = phys_origin
-        if phys_origin is not None:
-            self.phys_origin = np.array(phys_origin, np.float64)
-        self.phys_size = phys_size
-        if phys_size is not None:
-            self.phys_size = np.array(phys_size, np.float64)
-
-        self.segmentation_name = segmentation_name
-        self.region_id = region_id
-        self.segmentation = None
-
-        self.grid_size = grid_size
-        if grid_size is not None:
-            self.grid_size = np.array(grid_size, dtype=np.int32)
-
-        self.overlap_mm = overlap_mm
-
-    @property
-    def grid_of_chunks(self):
-        if self.grid_size is not None and self.overlap_mm is not None:
-            return True
-        else:
-            return False
-
-    @property
-    def whole_image(self):
-        # if self.phys_origin is None and self.phys_size is None and not self.export_region:
-        if self.phys_size is None and not self.export_region:
-            return True
-        else:
-            return False
-
-    @property
-    def resample_image(self):
-        if self.input_resolution_level is None:
-            if self.output_resolution is not None:
-                return True
-        else:
-            return False
-
-    @property
-    def export_region(self):
-        if self.segmentation_name is not None and self.region_id is not None:
-            return True
-        else:
-            return False
-
-
-class Transform(object):
-    def __init__(self, transform_type, order, transform_name, transform):
-        self.order = order
-        self.transform_type = transform_type
-        self.transform = transform
-        self.transform_name = transform_name
-
-
-class CompositeTransform(object):
-    def __init__(self, list_of_transforms):
-        self.transforms = list_of_transforms
-
-    def add_transform(self, transform):
-        self.transforms.append(transform)
-
-    def sort_transforms(self):
-        self.transforms.sort(key=lambda x: x.order)
-
-    @property
-    def composite(self):
-        if len(self.transforms) == 0:
-            logger.debug("creating identity transform")
-            return sitk.Transform(sitk.AffineTransform(3))
-        self.sort_transforms()
-        ct = sitk.Transform(self.transforms[0].transform)
-        for transform in self.transforms[1:]:
-            ct.AddTransform(transform.transform)
-
-        return ct
-
-    @property
-    def affine_composite(self):
-        if len(self.transforms) == 0:
-            logger.debug("creating identity transform")
-            return sitk.Transform(sitk.AffineTransform(3))
-        act = None
-        self.sort_transforms()
-        for transform in self.transforms:
-            if transform.transform_type == 'affine':
-                if act is None:
-                    act = sitk.Transform(transform.transform)
-                else:
-                    act.AddTransform(transform.transform)
-
-        return act
-
-
 class ProxyChannel(object):
     def __init__(self, image_proxy, num_bdv_setup):
         """
@@ -1806,7 +939,7 @@ class ProxyChannel(object):
         self.subdivisions_path = PathUtil.get_sub_path(self.num_bdv_setup)
         self.setup_path = PathUtil.get_setup_path(self.num_bdv_setup)
 
-        self.resolutions, self.subdivisions = BigDataViewer.propose_mipmaps(self.image.voxel_size,
+        self.resolutions, self.subdivisions = bdv.BigDataViewer.propose_mipmaps(self.image.voxel_size,
                                                                             self.image.image_shape)
 
         if self.image.is_multichannel:
@@ -1927,751 +1060,6 @@ class ProxyChannel(object):
                                                 self.spacing)
 
 
-class SitkDataType(object):
-    def __init__(self, pixel_type, is_segmentation=False):
-        self.is_segmentation = is_segmentation
-        self.pixel_type = pixel_type
-
-        if self.pixel_type in [sitk.sitkVectorUInt8, sitk.sitkVectorInt8, sitk.sitkVectorUInt16,
-                               sitk.sitkVectorInt16, sitk.sitkVectorUInt32, sitk.sitkVectorInt32,
-                               sitk.sitkVectorUInt64, sitk.sitkVectorInt64, sitk.sitkVectorFloat32,
-                               sitk.sitkVectorFloat64]:
-            self.component_type = 'vector'
-            self.interpolation_type = sitk.sitkLinear
-            self.interpolation_pixel = sitk.sitkVectorFloat32
-
-        elif self.pixel_type in [sitk.sitkUInt8, sitk.sitkInt8, sitk.sitkUInt16,
-                                 sitk.sitkInt16, sitk.sitkUInt32, sitk.sitkInt32,
-                                 sitk.sitkUInt64, sitk.sitkInt64, sitk.sitkFloat32,
-                                 sitk.sitkFloat64]:
-
-            if not self.is_segmentation:
-                self.component_type = 'scalar'
-                self.interpolation_type = sitk.sitkLinear
-                self.interpolation_pixel = sitk.sitkFloat32
-            else:
-                self.component_type = 'scalar'
-                self.interpolation_type = sitk.sitkNearestNeighbor
-                self.interpolation_pixel = self.pixel_type
-
-        else:
-            raise ValueError("Unknown pixel type: {}".format(self.pixel_type))
-
-    def __repr__(self):
-        return "Pixel type: {}\n" \
-               "Component type: {}\n" \
-               "Interpolation type: {}\n" \
-               "Interpolation pixel type: {}\n" \
-               "Is segmentation: {}".format(self.pixel_type,
-                                            self.component_type,
-                                            self.interpolation_type,
-                                            self.interpolation_pixel,
-                                            self.is_segmentation)
-
-
-class MetaImage(object):
-    def __init__(self,
-                 data,
-                 affine,
-                 pixel_type,
-                 direction,
-                 is_segmentation=False,
-                 is_nifti=False):
-
-        if len(data.shape) > 4:
-            data = data[:, :, :, 0, :]
-
-        self.data = data
-        self.data_shape = data.shape
-        self.image_shape = self.data_shape[:3]
-        self.is_segmentation = is_segmentation
-        self.is_nifti = is_nifti
-
-        self.direction = direction
-        self.voxel_size = np.array(nib.affines.voxel_sizes(affine), dtype=np.float64)
-        self.affine = affine
-        self.origin = self.affine[:3, 3]
-        self.pixel_type = pixel_type
-        self.sitk_data = SitkDataType(self.pixel_type, self.is_segmentation)
-        self.is_segmentation = is_segmentation
-        self.transpose = np.arange(len(self.data_shape))
-        self.transpose[:3] = [2, 1, 0]
-
-        logger.debug("Origin when creating meta image: {}".format(self.origin))
-
-    def get_sitk_image(self):
-        img_data = self.data.copy()
-        transpose_data = [2, 1, 0]
-        if self.sitk_data.component_type == 'vector':
-            if len(img_data.shape) == 4:
-                # img_data = img_data[:, :, :, 0, :]
-                transpose_data = np.arange(len(img_data.shape))
-                transpose_data[:3] = [2, 1, 0]
-
-        img_data = img_data.transpose(self.transpose)
-        img_data = sitk.GetImageFromArray(img_data)
-        img_data.SetSpacing(self.voxel_size)
-        img_data.SetOrigin(self.origin)
-        img_data.SetDirection(self.direction)
-
-        logger.debug("Set spacing {} \n origin {}\n and direction {}".format(self.voxel_size,
-                                                                             self.origin,
-                                                                             self.direction))
-
-        return img_data
-
-    def save_nifti(self, output_path):
-        logger.debug("Origin when saving: {}".format(self.origin))
-        logger.debug("affine when saving: {}".format(self.affine))
-        nifti_img = nib.Nifti1Image(self.data, self.affine)
-        nifti_img.header['xyzt_units'] = 2
-        nifti_img.header['sform_code'] = 2
-        nifti_img.header['qform_code'] = 0
-        nifti_img.header['pixdim'][4:] = 0
-        nib.save(nifti_img, output_path)
-
-    def reorient(self, source_orientation):
-        if source_orientation == 'RAS' or self.is_nifti:
-            return
-        transpose, flip = ImageProcessor.get_transpose(source_orientation)
-        logger.debug("transpose: {}\n flip: {}".format(transpose, flip))
-        _transpose = np.arange(len(self.data_shape))
-        _transpose[:3] = transpose
-        self.data = self.data.transpose(_transpose)
-        self.reverse_axes(flip < 0)
-
-        self.voxel_size = self.voxel_size[transpose]
-        self.origin = np.abs(self.origin[transpose]) * SIGN_LPI_T
-        affine = np.abs(np.diag(self.voxel_size)) * SIGN_LPI_A
-        self.affine = nib.affines.from_matvec(affine, self.origin)
-        logger.debug("Origin after reorienting: {}".format(self.origin))
-
-    def reverse_axes(self, reverse=[False, False, False]):
-        if reverse[0]:
-            self.data = self.data[::-1, :, :]
-        if reverse[1]:
-            self.data = self.data[:, ::-1, :]
-        if reverse[2]:
-            self.data = self.data[:, :, ::-1]
-
-    def set_direction_LPI(self):
-        if self.is_nifti:
-            return
-        self.direction = DIRECTION_LPI
-        self.affine[:3, :3] = np.abs(self.affine[:3, :3]) * SIGN_LPI_A
-        self.affine[:3, 3] = np.abs(self.affine[:3, 3]) * SIGN_LPI_T
-
-    def set_direction_RAS(self):
-
-        self.direction = DIRECTION_RAS
-        self.affine[:3, :3] = np.abs(self.affine[:3, :3]) * SIGN_RAS_A
-        if not self.is_nifti:
-            self.affine[:3, 3] = np.abs(self.affine[:3, 3]) * SIGN_RAS_T
-            self.origin = self.affine[:3, 3]
-        logger.debug("Origin after setting RAS direction: {}".format(self.origin))
-
-    @staticmethod
-    def meta_image_from_channel(data, _channel):
-        """
-
-        :type data: numpy.ndarray
-        :type _channel: ProxyChannel
-        """
-        return MetaImage(data, _channel.image.affine,
-                         _channel.image.pixel_type, _channel.image.direction,
-                         _channel.image.is_segmentation)
-
-
-class MetaMultiChannelImage(MetaImage):
-    def __init__(self, *args, **kwargs):
-        super(MetaMultiChannelImage, self).__init__(*args, **kwargs)
-
-
-class ImageProcessor(object):
-    @staticmethod
-    def reverse_axes(data, reverse=[False, False, False]):
-        if reverse[0]:
-            data = data[::-1, :, :]
-        if reverse[1]:
-            data = data[:, ::-1, :]
-        if reverse[2]:
-            data = data[:, :, ::-1]
-        return data
-
-    @staticmethod
-    def get_bounding_box(segmentation, reg_id):
-        label_stats_filter = sitk.LabelStatisticsImageFilter()
-        label_stats_filter.Execute(segmentation, segmentation)
-        x1, x2, y1, y2, z1, z2 = label_stats_filter.GetBoundingBox(reg_id)
-        start_point = (x1, y1, z1)
-        end_point = (x2, y2, z2)
-
-        return start_point, end_point
-
-    @staticmethod
-    def get_affines(voxel_size, origin):
-        affine_voxel_to_physical = sitk.AffineTransform(3)
-        params = tuple(np.hstack([np.diag(voxel_size).ravel(), origin]))
-        affine_voxel_to_physical.SetParameters(params)
-        affine_physical_to_voxel = affine_voxel_to_physical.GetInverse()
-
-        return affine_voxel_to_physical, affine_physical_to_voxel
-
-    @staticmethod
-    def create_dummy_image(size, direction, spacing, origin, pixel_id):
-        logger.debug("size: {}".format(size))
-        logger.debug("direction: {}".format(direction))
-        logger.debug("spacing: {}".format(spacing))
-        logger.debug("origin: {}".format(origin))
-        logger.debug("pixel_id: {}".format(pixel_id))
-        img = sitk.Image(int(size[0]), int(size[1]), int(size[2]), int(pixel_id))
-        img.SetDirection(direction)
-        img.SetSpacing(spacing)
-        img.SetOrigin(origin)
-
-        return img
-
-    @staticmethod
-    def trim_image_to_label_region(img, labels, reg_id, margin=0):
-        """
-        Trims intensity image to bounding box determined by label (region_id)
-        with given margin value.
-        :param img:
-        :param labels:
-        :param reg_id:
-        :param margin: how many voxels of margin should be added
-        :return:
-        """
-
-        label_stats_filter = sitk.LabelStatisticsImageFilter()
-        roi_filter = sitk.RegionOfInterestImageFilter()
-
-        label_stats_filter.Execute(img, labels)
-        x1, x2, y1, y2, z1, z2 = label_stats_filter.GetBoundingBox(reg_id)
-        index = [x1, y1, z1]
-        size = [x2 - x1, y2 - y1, z2 - z1]
-
-        # check if margin within bounds of img
-        img_size = np.array(img.GetSize())
-        m_index = np.array(index) - margin
-        m_size = np.array(size) + (2 * margin)
-
-        if np.any(m_index < 0):
-            logger.debug("margin for segmentation reduced at index, YOU ARE ON THE EDGE")
-            m_index[np.argwhere(m_index < 0)] = 0
-            reduce_size = np.array(index) - m_index
-            m_size -= reduce_size
-
-        if np.any((m_index + m_size) > img_size):
-            logger.debug("margin for segmentation reduced at upper bound, YOU ARE ON THE EDGE")
-            out_of_bounds = np.argwhere((m_index + m_size) > img_size)
-            m_size[out_of_bounds] = img_size[out_of_bounds]
-
-        index = list(m_index)
-        size = list(m_size)
-
-        roi_filter.SetIndex(index)
-        roi_filter.SetSize(size)
-        out_img = roi_filter.Execute(img)
-
-        return out_img
-
-    @staticmethod
-    def extract_labeled_region(reg_id, img, labels, margin=0):
-        """
-        Extracts region of interest from img identified by region_id, which corresponds to
-        label intensity value in labels'
-        :param reg_id: unit16 indicating designated region
-        :param img: sitk.Image
-        :param labels: sitk.Image of segmentation
-        :param margin:
-        :return: sitk.Image
-        """
-
-        labels = sitk.Cast(labels, sitk.sitkInt16)
-        threshold_filter = sitk.ThresholdImageFilter()
-        rescale_filter = sitk.RescaleIntensityImageFilter()
-        resample_filter = sitk.ResampleImageFilter()
-        multiply_filter = sitk.MultiplyImageFilter()
-
-        resample_filter.SetReferenceImage(img)
-        resample_filter.SetInterpolator(sitk.sitkNearestNeighbor)
-        labels = resample_filter.Execute(labels)
-
-        # trim image to bounding box around selected region in segmentation
-        img = ImageProcessor.trim_image_to_label_region(img, labels, reg_id, margin=margin)
-        # trim segmentation to some reasonable bounding box
-        labels = ImageProcessor.trim_image_to_label_region(labels, labels, reg_id, margin=margin)
-
-        threshold_filter.SetLower(reg_id)
-        threshold_filter.SetUpper(reg_id)
-        labels = threshold_filter.Execute(labels)
-
-        rescale_filter.SetOutputMaximum(1)
-        labels = rescale_filter.Execute(labels)
-        labels = sitk.Cast(labels, img.GetPixelID())
-
-        region = multiply_filter.Execute(img, labels)
-
-        return region
-
-    @staticmethod
-    def compute_offset(sitk_image, spacing):
-        offset = np.array(sitk_image.GetDirection()).reshape(3, 3) * spacing
-
-        for i in range(offset.shape[0]):
-            offset[i] *= 0.5
-
-        return offset
-
-    @staticmethod
-    def get_size_origin(img, transform, spacing):
-        """
-        Recompute the size and origin for image transformation.
-        For RAS orientation only.
-
-        :type img: sitk.Image
-        :type transform: sitk.Transform
-        :type spacing: np.array
-        :param img: input image for transformation
-        :param transform: itk (affine) transform
-        :param spacing: spacing of the output image
-        :return:
-        """
-        size = img.GetSize()
-        # find all corners of an image in coordinate space
-        index = []
-        for i in xrange(8):
-            for j in xrange(3):
-                if (i >> j) % 2:
-                    index.append(size[j] - 1)
-                else:
-                    index.append(0)
-
-        index = np.array(index)
-        index = index.reshape(-1, 3)
-
-        # find all corners of the image in physical output space
-        points = []
-        corners = []
-        for p in index:
-            point = img.TransformIndexToPhysicalPoint(p)
-            points.append(point)
-            corners.append(transform.TransformPoint(point))
-
-        _max = np.ones(3) * np.finfo(np.float32).min
-        _min = np.ones(3) * np.finfo(np.float32).max
-
-        for c in corners:
-            for j in xrange(3):
-                _min[j] = c[j] if c[j] < _min[j] else _min[j]
-                _max[j] = c[j] if c[j] > _max[j] else _max[j]
-
-        new_size = np.round(((_max - _min) / spacing) + 1)
-        _min[2] = _max[2]  # RAS direction
-        new_origin = _min
-
-        return new_size, new_origin
-
-    @staticmethod
-    def apply_transformations(meta_image, composite_transform):
-
-        input_image = meta_image.get_sitk_image()
-        output_size, output_origin = ImageProcessor.get_size_origin(input_image,
-                                                                    composite_transform.affine_composite.GetInverse(),
-                                                                    np.array(input_image.GetSpacing()))
-
-        logger.debug("output_size: {}".format(output_size))
-        logger.debug("output_origin: {}".format(output_origin))
-        logger.debug("input spacing: {}".format(input_image.GetSpacing()))
-
-        resampler = sitk.ResampleImageFilter()
-        resampler.SetInterpolator(sitk.sitkLinear)
-        resampler.SetDefaultPixelValue(0)
-
-        resampler.SetOutputOrigin(output_origin)
-        resampler.SetOutputSpacing(input_image.GetSpacing())
-        resampler.SetSize(map(int, output_size))
-        resampler.SetOutputDirection(input_image.GetDirection())
-
-        resampler.SetTransform(composite_transform.composite)
-
-        out = resampler.Execute(input_image)
-        return out
-
-    @staticmethod
-    def resample_sitk(sitk_image, scale_factors, interpolation_type):
-
-        scale_factors = np.array(scale_factors, dtype=np.float64)
-
-        input_size = np.array(sitk_image.GetSize(), dtype=np.float64)
-        output_size = np.int16(np.floor(input_size * scale_factors))
-        output_size[0] = int(round(input_size[0] * scale_factors[0]))
-
-        voxel_size = np.array(sitk_image.GetSpacing())
-
-        output_spacing = voxel_size * input_size
-        output_spacing = output_spacing / output_size
-
-        input_offset = ImageProcessor.compute_offset(sitk_image, voxel_size)
-        output_offset = ImageProcessor.compute_offset(sitk_image, output_spacing)
-
-        output_origin = np.array(sitk_image.GetOrigin()) - input_offset + output_offset
-        output_origin = np.diag(output_origin)
-
-        identity_transform = sitk.AffineTransform(3)
-
-        resampler = sitk.ResampleImageFilter()
-        resampler.SetInterpolator(interpolation_type)
-        resampler.SetDefaultPixelValue(0)
-        resampler.SetTransform(identity_transform)
-        resampler.SetSize((map(int, output_size)))
-        resampler.SetOutputOrigin(tuple(output_origin))
-        resampler.SetOutputSpacing(tuple(output_spacing))
-        resampler.SetOutputDirection(sitk_image.GetDirection())
-
-        output_image = resampler.Execute(sitk_image)
-
-        return output_image
-
-    @staticmethod
-    def resample_image(meta_image, scale_factors, debug=False):
-
-        """
-        :type debug: bool
-        :type scale_factors: numpy.ndarray
-        :type meta_image: MetaImage
-        """
-
-        scale_factors = np.array(scale_factors, dtype=np.float64)
-        sitk_image = meta_image.get_sitk_image()
-
-        logger.debug("Interpolator type: {}".format(meta_image.sitk_data.interpolation_type))
-
-        # input_size = np.array(meta_image.data_shape, dtype=np.float64)
-        input_size = np.array(sitk_image.GetSize(), dtype=np.float64)
-        output_size = np.int16(np.floor(input_size * scale_factors))
-        output_size[0] = int(round(input_size[0] * scale_factors[0]))
-
-        output_spacing = meta_image.voxel_size * input_size
-        output_spacing = output_spacing / output_size
-
-        input_offset = ImageProcessor.compute_offset(sitk_image, meta_image.voxel_size)
-        output_offset = ImageProcessor.compute_offset(sitk_image, output_spacing)
-
-        output_origin = meta_image.origin - input_offset + output_offset
-        output_origin = np.diag(output_origin)
-
-        output_affine = nib.affines.from_matvec(np.diag(output_spacing) * SIGN_RAS_A,
-                                                [0., 0., 0.])
-        output_affine[:3, 3] = output_origin
-
-        logger.debug("Resampling output affine: {}".format(output_affine))
-
-        identity_transform = sitk.AffineTransform(3)
-        sitk_image = sitk.Cast(sitk_image, meta_image.sitk_data.interpolation_pixel)
-
-        logger.debug("Output size: {}".format(output_size))
-
-        resampler = sitk.ResampleImageFilter()
-        resampler.SetInterpolator(meta_image.sitk_data.interpolation_type)
-        resampler.SetDefaultPixelValue(0)
-        resampler.SetTransform(identity_transform)
-        resampler.SetSize((map(int, output_size)))
-        resampler.SetOutputOrigin(tuple(output_origin))
-        resampler.SetOutputSpacing(tuple(output_spacing))
-        resampler.SetOutputDirection(meta_image.direction)
-
-        if debug:
-            resampler.DebugOn()
-
-        output_image = resampler.Execute(sitk_image)
-        output_image = sitk.Cast(output_image, meta_image.pixel_type)
-
-        # sitk.WriteImage(output_image, '../results/sitk_img.nii.gz')
-
-        output_image = sitk.GetArrayFromImage(output_image)
-        output_image = output_image.transpose(meta_image.transpose)
-
-        out_meta_image = MetaImage(output_image, output_affine, meta_image.pixel_type,
-                                   meta_image.direction, meta_image.is_segmentation)
-
-        # return MetaImage(output_image, output_affine, meta_image.pixel_type,
-        #                 meta_image.direction, meta_image.is_segmentation)
-
-        return out_meta_image
-
-    @staticmethod
-    def get_transpose(source_space):
-        target_space = np.array(list('RAS'))
-        reverse_axes_dict = dict(zip('RASLPI', 'LPIRAS'))
-        source_space = np.array(list(source_space))
-
-        transpose = []
-        flip = []
-        for i, letter in enumerate(target_space):
-            if letter == source_space[i]:
-                transpose.append(i)
-            elif letter == reverse_axes_dict[source_space[i]]:
-                transpose.append(i)
-            else:
-                if letter in source_space:
-                    to = np.argwhere(letter == source_space)[0][0]
-                    transpose.append(to)
-                else:
-                    reverse_source_space = np.array([reverse_axes_dict[l] for l in source_space])
-                    to = np.argwhere(letter == reverse_source_space)[0][0]
-                    transpose.append(to)
-
-        source_space = source_space[transpose]
-
-        for i, letter in enumerate(source_space):
-            if letter == target_space[i]:
-                flip.append(1)
-            elif letter == reverse_axes_dict[target_space[i]]:
-                flip.append(-1)
-            else:
-                logger.debug("Something went wrong with reorienting RAI codes")
-
-        return np.array(transpose), np.array(flip)
-
-
-class BigDataViewer(object):
-    def __init__(self, h5_file):
-
-        self.h5_file = h5_file
-        self.root = self.h5_file['/']
-        self.setups = []
-
-        if self.number_of_bdv_channels is None:
-            self.root.attrs['BDV_setups_count'] = 0
-        else:
-            for i in range(self.number_of_bdv_channels):
-                self.setups.append(self.h5_file[PathUtil.get_setup_path(i)])
-
-    def add_setup(self, shape, spacing, affine):
-        setup = self.h5_file[PathUtil.get_setup_path(self.number_of_bdv_channels)]
-        setup.attrs['shape'] = shape
-        setup.attrs['spacing'] = spacing
-        setup.attrs['affine'] = affine
-        self.setups.append(setup)
-        self.number_of_bdv_channels = 1
-
-    def create_xml_from_setups(self, xml_fname, fname):
-        BigDataViewer.create_xml(xml_fname, fname, self.setups_shapes, self.setups_affines,
-                                 self.setups_spacings)
-
-    @property
-    def number_of_bdv_channels(self):
-        if self.root.attrs.__contains__('BDV_setups_count'):
-            return self.root.attrs['BDV_setups_count']
-        else:
-            return None
-
-    @number_of_bdv_channels.setter
-    def number_of_bdv_channels(self, value):
-        self.root.attrs['BDV_setups_count'] += value
-
-    @property
-    def setups_shapes(self):
-        return [setup.attrs['shape'] for setup in self.setups]
-
-    @property
-    def setups_spacings(self):
-        return [setup.attrs['spacing'] for setup in self.setups]
-
-    @property
-    def setups_affines(self):
-        return [setup.attrs['affine'] for setup in self.setups]
-
-    @staticmethod
-    def propose_mipmaps(voxel_size, shape):
-        # type: (numpy.ndarray, numpy.ndarray) -> (numpy.ndarray, numpy.ndarray)
-        """Automatically determines appropriate number of mipmap levels, subsampling
-        factors and chunk sizes for each level.
-
-        Based on original BigDataViewer implementation. Chunksize is set as either
-        16x16x16 or 32x32x4 depending on which one is closer to isotropic.
-
-        Parameters
-        ----------
-
-        :param voxel_size: physical size of voxel (3D)
-        :type voxel_size: np.array( float )
-
-        :param shape: resolution of input image (3D)
-        :type shape: np.array( int )
-
-        Returns
-        -------
-
-        :rtype: tuple of two numpy arrays with subsampling factors and chunk sizes"""
-
-        '''LOWEST_RES = 128
-        subdiv_16_16_16 = np.array([16, 16, 16])
-        subdiv_32_32_4 = np.array([[4, 32, 32],
-                                   [32, 4, 32],
-                                   [32, 32, 4]])
-
-        subdiv_128_128_128 = np.array([128, 128, 128])
-        subdiv_256_256_32 = np.array([[32, 256, 256],
-                                      [256, 32, 256],
-                                      [256, 256, 32]])'''
-
-        LOWEST_RES = 256
-        subdiv_16_16_16 = np.array([16, 16, 16])
-        subdiv_32_32_4 = np.array([[4, 32, 32],
-                                   [32, 4, 32],
-                                   [32, 32, 4]])
-
-        subdiv_128_128_128 = np.array([256, 256, 256])
-        subdiv_256_256_32 = np.array([[32, 256, 256],
-                                      [256, 32, 256],
-                                      [256, 256, 32]])
-
-        resolutions = []
-        subdivisions = []
-
-        # keep original resolution
-        res = np.array([1, 1, 1])
-        voxel_scale = voxel_size / voxel_size.min()
-
-        # compute number of levels for the mipmap pyramid
-        # levels = np.int(np.ceil(np.log2(shape.max())) - np.log2(LOWEST_RES))
-        while True:
-            logger.debug("Mipmap resolution: {}".format(shape // res))
-            resolutions.append(res)
-            vscale_max = voxel_scale.max()
-            shape_min = (shape // res).min()
-            logger.debug("Voxel scale: {}".format(voxel_scale))
-
-            if (4 * vscale_max / 32.) > (1. / vscale_max):
-                if shape_min > LOWEST_RES:
-                    subdivisions.append(subdiv_256_256_32[voxel_scale.argmax()])
-                else:
-                    subdivisions.append(subdiv_32_32_4[voxel_scale.argmax()])
-            else:
-                if shape_min > LOWEST_RES:
-                    subdivisions.append(subdiv_128_128_128)
-                else:
-                    subdivisions.append(subdiv_16_16_16)
-
-            res = res.copy()
-            voxel_scale = voxel_scale.copy()
-
-            res[voxel_scale < 2.0] = res[voxel_scale < 2.0] * 2
-            voxel_scale[voxel_scale < 2.0] = voxel_scale[voxel_scale < 2.0] * 2
-
-            voxel_scale = voxel_scale / voxel_scale.min()
-            if (shape // res).max() < LOWEST_RES or (shape // res).min() < 32:
-                break
-
-        return np.array(resolutions, dtype=np.float64), np.array(subdivisions)
-
-    @staticmethod
-    def create_xml(xml_fname, fname, img_shapes,
-                   img_affines, voxel_sizes, unit='mm', partition_fnames=None):
-        '''
-        Creates generic BigDataViewer xml file for single setup-single timepoint
-        image
-
-        Parameters
-        ----------
-        param xml_fname: path to output xml file
-        type xml_fname: str
-
-        param fname: path to the hdf5 file
-        type fname: str
-
-        param img_shape: highest resolution of the 3D image
-        type img_shape: array[int, int, int]
-
-        param img_affine: affine array defining position of the image data array in
-                          a reference space
-        type img_affine: 4x4 matrix of floats
-        '''
-        output_dir, fname = os.path.split(fname)
-        sizes = [' '.join([str(x).strip() for x in img_shape])
-                 for img_shape in img_shapes]
-        voxel_sizes = [' '.join([str(x).strip() for x in voxel_size])
-                       for voxel_size in voxel_sizes]
-
-        np.set_printoptions(suppress=True, precision=4)
-
-        if partition_fnames is None:
-            affinev = [''.join(np.str(
-                list(np.hstack(img_affine[:-1])))[1:-1].split(','))
-                       for img_affine in img_affines]
-        else:
-            affinev = [' '.join([str(x) for x in img_affine])
-                       for img_affine in img_affines]
-
-        root = etree.Element("SpimData")
-        root.attrib['version'] = '0.2'
-        BasePath = etree.SubElement(root, "BasePath")
-        BasePath.attrib["type"] = 'relative'
-        BasePath.text = '.'
-        SequenceDescription = etree.SubElement(root, "SequenceDescription")
-        ViewRegistrations = etree.SubElement(root, "ViewRegistrations")
-
-        #   SequenceDescription
-        ImageLoader = etree.SubElement(SequenceDescription, "ImageLoader")
-        ImageLoader.attrib['format'] = "bdv.hdf5"
-        hdf5 = etree.SubElement(ImageLoader, "hdf5")
-        hdf5.attrib['type'] = "relative"
-        hdf5.text = fname
-
-        if partition_fnames is not None:
-            for fname in partition_fnames:
-                partition = etree.SubElement(ImageLoader, "partition")
-                path = etree.SubElement(partition, "path")
-                path.attrib['type'] = "relative"
-                path.text = fname
-                timepoints = etree.SubElement(partition, "timepoints")
-                timepoints.text = "0"
-                setups = etree.SubElement(partition, "setups")
-                setups.text = "0"
-
-        ViewSetups = etree.SubElement(SequenceDescription, "ViewSetups")
-        for i, vs in enumerate(sizes):
-            ViewSetup = etree.SubElement(ViewSetups, "ViewSetup")
-            vs_id = etree.SubElement(ViewSetup, "id")
-
-            vs_id.text = str(i)  # mandatory
-            vs_name = etree.SubElement(ViewSetup, "name")
-            vs_name.text = "channel " + str(i)  # optional
-            vs_size = etree.SubElement(ViewSetup, "size")
-            vs_size.text = sizes[i]  # optional
-            vs_voxelSize = etree.SubElement(ViewSetup, "voxelSize")
-            vs_voxelSize_unit = etree.SubElement(vs_voxelSize, "unit")
-            vs_voxelSize_unit.text = unit
-            vs_voxelSize_size = etree.SubElement(vs_voxelSize, "size")
-            vs_voxelSize_size.text = voxel_sizes[i]
-
-        Timepoints = etree.SubElement(SequenceDescription, "Timepoints")
-        Timepoints.attrib['type'] = "range"
-        first = etree.SubElement(Timepoints, "first")
-        first.text = "0"
-        last = etree.SubElement(Timepoints, "last")
-        last.text = "0"
-
-        # ViewRegistrations
-        for i, vr in enumerate(img_affines):
-            ViewRegistration = etree.SubElement(ViewRegistrations,
-                                                "ViewRegistration")
-            ViewRegistration.attrib['timepoint'] = "0"
-            ViewRegistration.attrib['setup'] = str(i)
-            ViewTransform = etree.SubElement(ViewRegistration, "ViewTransform")
-            ViewTransform.attrib['type'] = "affine"
-            affine = etree.SubElement(ViewTransform, "affine")
-            affine.text = affinev[i]
-
-        doc = etree.ElementTree(root)
-        doc.write(os.path.join(output_dir, xml_fname),
-                  encoding="UTF-8",
-                  pretty_print=True)
-
-
 def test_proxy(input_path, json_path):
     meta = dm.ImageMetaData(input_path)
     with open(json_path) as fp:
@@ -2680,7 +1068,7 @@ def test_proxy(input_path, json_path):
     meta.update(json_meta)
 
     # ip = StreamableTiffProxy('autofluo', ' mysz_2', "auto_8_Z%03d.ome.tif", meta, 0.3)
-    ip = StreamableOMEProxy('cfos', 'fos_4', None, meta, 1)
+    ip = image.StreamableOMEProxy('cfos', 'fos_4', None, meta, 1)
     # ip = NonStreamableTiffProxy('cfos', 'mysz', None, meta, None)
     # ip = NiftiProxy('autofluo', 'exp2', None, meta, None)
     print(ip)
@@ -2705,7 +1093,7 @@ def test_lmdhf(image_path, json_path, hdf_path, multichannel=False):
     # ip = ImageProxy.get_image_proxy_class(meta)('cfos', 'mysz', 'Z%06d.tif', meta, 'check_roi_bigger.xml', 4.,
     #                                           is_multichannel=multichannel)
 
-    ip = ImageProxy.get_image_proxy_class(meta)('cfos', 'mysz', None, meta, 'check_roi_bigger.xml', 4.,
+    ip = image.ImageProxy.get_image_proxy_class(meta)('cfos', 'mysz', None, meta, 'check_roi_bigger.xml', 4.,
                                                 is_multichannel=multichannel)
     # ip = StreamableOMEProxy('cfos', 'fos_4', None, meta, 1)
 
@@ -2721,8 +1109,8 @@ def test_export(hdf_path):
     lmf = LightMicroscopyHDF(hdf_path)
     channel = lmf.get_channel('cfos2')
     channel.write_affine('to_atlas', '/home/sbednarek/DEV/lsfm_schema/lsfm_image_server/results/mysz_affine.txt')
-    list_of_transforms = [TransformTuple(0, 'to_atlas', 'affine', True)]
-    e_cmd = ExportCmd(channel_name='cfos2', output_path='../results/_RAS_cfos2_35um.nii.gz',
+    list_of_transforms = [transforms.TransformTuple(0, 'to_atlas', 'affine', True)]
+    e_cmd = export.ExportCmd(channel_name='cfos2', output_path='../results/_RAS_cfos2_35um.nii.gz',
                       output_resolution=[0.035, 0.035, 0.035],
                       input_orientation='SPR', input_resolution_level=None,
                       list_of_transforms=list_of_transforms,
@@ -2741,8 +1129,8 @@ def write_cfos_affine(hdf_path):
 def test_cfos_export(hdf_path):
     lmf = LightMicroscopyHDF(hdf_path)
 
-    list_of_transforms = [TransformTuple(0, 'new_auto_to_template', 'affine', True)]
-    e_cmd = ExportCmd(channel_name='autofluo', output_path='../results/_cfos_15um.nii.gz',
+    list_of_transforms = [transforms.TransformTuple(0, 'new_auto_to_template', 'affine', True)]
+    e_cmd = export.ExportCmd(channel_name='autofluo', output_path='../results/_cfos_15um.nii.gz',
                       output_resolution=[0.015, 0.015, 0.015],
                       input_orientation='RSP', input_resolution_level=None,
                       list_of_transforms=[],
@@ -2759,7 +1147,7 @@ def test_cfos_add_displacement_field(image_path, json_path, hdf_path):
         json_meta = json.load(fp)
 
     meta.update(json_meta)
-    ip = ImageProxy.get_image_proxy_class(meta)('inverse_warp_template', 'mysz', None, meta, None, 2.,
+    ip = image.ImageProxy.get_image_proxy_class(meta)('inverse_warp_template', 'mysz', None, meta, None, 2.,
                                                 is_multichannel=True)
 
     lmf.write_channel(ip)
@@ -2768,11 +1156,11 @@ def test_cfos_add_displacement_field(image_path, json_path, hdf_path):
 def test_cfos_apply_displacement_field(hdf_path):
     lmf = LightMicroscopyHDF(hdf_path)
 
-    list_of_transforms = [TransformTuple(0, 'inverse_warp_template', 'df', True),
-                          TransformTuple(1, 'new_auto_to_template', 'affine', True)]
+    list_of_transforms = [transforms.TransformTuple(0, 'inverse_warp_template', 'df', True),
+                          transforms.TransformTuple(1, 'new_auto_to_template', 'affine', True)]
 
     # list_of_transforms = [TransformTuple(0, 'new_auto_to_template', 'affine', True)]
-    e_cmd = ExportCmd(channel_name='autofluo', output_path='../results/_cfos_df_af_origin_25sum.nii.gz',
+    e_cmd = export.ExportCmd(channel_name='autofluo', output_path='../results/_cfos_df_af_origin_25sum.nii.gz',
                       output_resolution=[0.025, 0.025, 0.025],
                       input_orientation='RSP', input_resolution_level=None,
                       list_of_transforms=list_of_transforms,
@@ -2788,7 +1176,7 @@ def write_template_to_hdf(image_path, json_path, hdf_path):
 
     meta.update(json_meta)
 
-    ip = ImageProxy.get_image_proxy_class(meta)('right_template', 'mysz', None, meta, 'template.xml', 2.,
+    ip = image.ImageProxy.get_image_proxy_class(meta)('right_template', 'mysz', None, meta, 'template.xml', 2.,
                                                 is_multichannel=False, is_segmentation=False)
 
     lm_test = LightMicroscopyHDF(hdf_path)
@@ -2802,7 +1190,7 @@ def write_seg_to_hdf(image_path, json_path, hdf_path):
 
     meta.update(json_meta)
 
-    ip = ImageProxy.get_image_proxy_class(meta)('autofluo_segmentation', 'mysz', None, meta, 'w.xml', 2.,
+    ip = image.ImageProxy.get_image_proxy_class(meta)('autofluo_segmentation', 'mysz', None, meta, 'w.xml', 2.,
                                                 is_multichannel=False, is_segmentation=True)
 
     lm_test = LightMicroscopyHDF(hdf_path)
@@ -2812,29 +1200,29 @@ def write_seg_to_hdf(image_path, json_path, hdf_path):
 def test_template_export(hdf_path):
     lmf = LightMicroscopyHDF(hdf_path)
 
-    list_of_transforms = [TransformTuple(0, 'forward_warp', 'df', False),
-                          TransformTuple(1, 'auto_to_template', 'affine', False)]
+    list_of_transforms = [transforms.TransformTuple(0, 'forward_warp', 'df', False),
+                          transforms.TransformTuple(1, 'auto_to_template', 'affine', False)]
 
-    list_of_transforms = [TransformTuple(0, 'auto_to_template', 'affine', False),
-                          TransformTuple(1, 'forward_warp', 'df', False)]
+    list_of_transforms = [transforms.TransformTuple(0, 'auto_to_template', 'affine', False),
+                          transforms.TransformTuple(1, 'forward_warp', 'df', False)]
 
     list_of_transforms = []
 
-    e_cmd = ExportCmd(channel_name='right_template', output_path='../results/template_2_auto_30um.nii.gz',
+    e_cmd = export.ExportCmd(channel_name='right_template', output_path='../results/template_2_auto_30um.nii.gz',
                       output_resolution=None,
                       input_orientation='RAS', input_resolution_level=1,
                       list_of_transforms=list_of_transforms,
                       phys_origin=None, phys_size=None)
     # lmf.export_image(e_cmd)
 
-    e_cmd = ExportCmd(channel_name='right_template', output_path='../results/template_40um.nii.gz',
+    e_cmd = export.ExportCmd(channel_name='right_template', output_path='../results/template_40um.nii.gz',
                       output_resolution=[0.04, 0.04, 0.04],
                       input_orientation='RAS', input_resolution_level=None,
                       list_of_transforms=list_of_transforms,
                       phys_origin=None, phys_size=None)
     lmf.export_image(e_cmd)
 
-    e_cmd = ExportCmd(channel_name='segmentation', output_path='../results/segmentation_to_auto_30um.nii.gz',
+    e_cmd = export.ExportCmd(channel_name='segmentation', output_path='../results/segmentation_to_auto_30um.nii.gz',
                       output_resolution=[0.030, 0.030, 0.030],
                       input_orientation='RAS', input_resolution_level=None,
                       list_of_transforms=list_of_transforms,
@@ -2873,7 +1261,7 @@ def write_transforms_signal(hdf_path, channel_name, dir_path,
 
     meta.update(json_meta)
 
-    ip = ImageProxy.get_image_proxy_class(meta)('inverse_warp_template', 'some_id', None, meta, None, 2.,
+    ip = image.ImageProxy.get_image_proxy_class(meta)('inverse_warp_template', 'some_id', None, meta, None, 2.,
                                                 is_multichannel=True)
 
     lmf.write_channel(ip)
@@ -2887,7 +1275,7 @@ def add_displacement_field(image_path, json_path, hdf_path):
         json_meta = json.load(fp)
 
     meta.update(json_meta)
-    ip = ImageProxy.get_image_proxy_class(meta)('inverse_warp_template', 'autofluo', None, meta, None, 2.,
+    ip = image.ImageProxy.get_image_proxy_class(meta)('inverse_warp_template', 'autofluo', None, meta, None, 2.,
                                                 is_multichannel=True)
 
     lmf.write_channel(ip)
@@ -2897,9 +1285,9 @@ def test_exp4_export(hdf_path):
     lmf = LightMicroscopyHDF(hdf_path)
 
     # list_of_transforms = [TransformTuple(0, 'auto_to_template', 'affine', True)]
-    list_of_transforms = [TransformTuple(0, 'inverse_warp_template', 'df', True),
-                          TransformTuple(1, 'auto_to_template', 'affine', True)]
-    e_cmd = ExportCmd(channel_name='autofluo', output_path='../results/exp_4/exp4_10um_affine_df_ref.nii.gz',
+    list_of_transforms = [transforms.TransformTuple(0, 'inverse_warp_template', 'df', True),
+                          transforms.TransformTuple(1, 'auto_to_template', 'affine', True)]
+    e_cmd = export.ExportCmd(channel_name='autofluo', output_path='../results/exp_4/exp4_10um_affine_df_ref.nii.gz',
                       output_resolution=[0.010, 0.010, 0.010],
                       input_orientation='PSR', input_resolution_level=None,
                       list_of_transforms=list_of_transforms,
@@ -2912,10 +1300,10 @@ def test_exp4_cfos_export(hdf_path):
     lmf = LightMicroscopyHDF(hdf_path)
 
     # list_of_transforms = [TransformTuple(0, 'auto_to_template', 'affine', True)]
-    list_of_transforms = [TransformTuple(0, 'cfos_to_auto', 'affine', True),
-                          TransformTuple(1, 'inverse_warp_template', 'df', True),
-                          TransformTuple(2, 'cfos_to_template', 'affine', True)]
-    e_cmd = ExportCmd(channel_name='fos', output_path='../results/exp_4/level_2_fos.nii.gz',
+    list_of_transforms = [transforms.TransformTuple(0, 'cfos_to_auto', 'affine', True),
+                          transforms.TransformTuple(1, 'inverse_warp_template', 'df', True),
+                          transforms.TransformTuple(2, 'cfos_to_template', 'affine', True)]
+    e_cmd = export.ExportCmd(channel_name='fos', output_path='../results/exp_4/level_2_fos.nii.gz',
                       output_resolution=[0.01, 0.01, 0.01],
                       input_orientation='PSR', input_resolution_level=None,
                       list_of_transforms=list_of_transforms,
@@ -2929,7 +1317,7 @@ def test_export():
 
     # list_of_transforms = [TransformTuple(0, 'auto_to_template', 'affine', True)]
     list_of_transforms = []
-    e_cmd = ExportCmd(channel_name='cfos', output_path='../results/check_roi_0.nii.gz',
+    e_cmd = export.ExportCmd(channel_name='cfos', output_path='../results/check_roi_0.nii.gz',
                       output_resolution=None,
                       input_orientation='PSR', input_resolution_level=0,
                       list_of_transforms=list_of_transforms,
@@ -2942,7 +1330,7 @@ def test_export():
 
 def test_region_export(hdf_path):
     lmf = LightMicroscopyHDF(hdf_path)
-    e_cmd = ExportCmd(channel_name='fos', output_path='../results/exp_4/extracted_reg_382_level_0.nii.gz',
+    e_cmd = export.ExportCmd(channel_name='fos', output_path='../results/exp_4/extracted_reg_382_level_0.nii.gz',
                       output_resolution=None,
                       input_orientation='PSR', input_resolution_level=0,
                       list_of_transforms=[],
@@ -2961,7 +1349,7 @@ def test_chunk_export(hdf_path):
                       phys_origin=[2.84, 1.81, -4.524], phys_size=[.5, .5, .5],
                       segmentation_name=None, region_id=None)'''
 
-    e_cmd = ExportCmd(channel_name='cfos', output_path='../results/13_D_chunk_level_0_cfos.nii.gz',
+    e_cmd = export.ExportCmd(channel_name='cfos', output_path='../results/13_D_chunk_level_0_cfos.nii.gz',
                       output_resolution=None,
                       input_orientation='LAI', input_resolution_level=0,
                       list_of_transforms=[],
@@ -2973,7 +1361,7 @@ def test_chunk_export(hdf_path):
 
 def test_grid_of_chunks_export(hdf_path):
     lmf = LightMicroscopyHDF(hdf_path)
-    e_cmd = ExportCmd(channel_name='cfos', output_path='../results/grid_chunks/whatever',
+    e_cmd = export.ExportCmd(channel_name='cfos', output_path='../results/grid_chunks/whatever',
                       output_resolution=None,
                       input_orientation='PSR', input_resolution_level=1,
                       list_of_transforms=[],
@@ -2985,7 +1373,7 @@ def test_grid_of_chunks_export(hdf_path):
 
 def test_whole_grid_of_chunks_export(hdf_path):
     lmf = LightMicroscopyHDF(hdf_path)
-    e_cmd = ExportCmd(channel_name='fos', output_path='../results/whole_grid/overlap',
+    e_cmd = export.ExportCmd(channel_name='fos', output_path='../results/whole_grid/overlap',
                       output_resolution=None,
                       input_orientation='PSR', input_resolution_level=2,
                       list_of_transforms=[],
@@ -2998,11 +1386,11 @@ def test_whole_grid_of_chunks_export(hdf_path):
 def test_whole_grid_of_chunks_transformed_export(hdf_path):
     lmf = LightMicroscopyHDF(hdf_path)
 
-    list_of_transforms = [TransformTuple(0, 'cfos_to_auto', 'affine', True),
-                          TransformTuple(1, 'inverse_warp_template', 'df', True),
-                          TransformTuple(2, 'cfos_to_template', 'affine', True)]
+    list_of_transforms = [transforms.TransformTuple(0, 'cfos_to_auto', 'affine', True),
+                          transforms.TransformTuple(1, 'inverse_warp_template', 'df', True),
+                          transforms.TransformTuple(2, 'cfos_to_template', 'affine', True)]
 
-    e_cmd = ExportCmd(channel_name='fos', output_path='../results/whole_grid/transform',
+    e_cmd = export.ExportCmd(channel_name='fos', output_path='../results/whole_grid/transform',
                       output_resolution=None,
                       input_orientation='PSR', input_resolution_level=2,
                       list_of_transforms=list_of_transforms,
@@ -3015,12 +1403,12 @@ def test_whole_grid_of_chunks_transformed_export(hdf_path):
 
 def test_chunk_transform_export(hdf_path, channel_name='cfos', output_path='../results/check_margis_2.nii.gz'):
     lmf = LightMicroscopyHDF(hdf_path)
-    list_of_transforms = [TransformTuple(0, 'cfos_to_auto', 'affine', True),
-                          TransformTuple(1, 'inverse_warp_template', 'df', True),
-                          TransformTuple(2, 'cfos_to_template', 'affine', True)]
+    list_of_transforms = [transforms.TransformTuple(0, 'cfos_to_auto', 'affine', True),
+                          transforms.TransformTuple(1, 'inverse_warp_template', 'df', True),
+                          transforms.TransformTuple(2, 'cfos_to_template', 'affine', True)]
 
     list_of_transforms = []
-    e_cmd = ExportCmd(channel_name=channel_name,
+    e_cmd = export.ExportCmd(channel_name=channel_name,
                       output_path=output_path,
                       output_resolution=[0.006, 0.006, 0.006],
                       input_orientation='PSR', input_resolution_level=None,
@@ -3036,9 +1424,9 @@ def test_chunk_transform_export(hdf_path, channel_name='cfos', output_path='../r
 
 def test_auto_chunk_transform_export(hdf_path):
     lmf = LightMicroscopyHDF(hdf_path)
-    list_of_transforms = [TransformTuple(0, 'inverse_warp_template', 'df', True),
-                          TransformTuple(1, 'auto_to_template', 'affine', True)]
-    e_cmd = ExportCmd(channel_name='autofluo', output_path='../results/exp_4/auto_2.nii.gz',
+    list_of_transforms = [transforms.TransformTuple(0, 'inverse_warp_template', 'df', True),
+                          transforms.TransformTuple(1, 'auto_to_template', 'affine', True)]
+    e_cmd = export.ExportCmd(channel_name='autofluo', output_path='../results/exp_4/auto_2.nii.gz',
                       output_resolution=None,
                       input_orientation='PSR', input_resolution_level=0,
                       list_of_transforms=list_of_transforms,
@@ -3050,7 +1438,7 @@ def test_auto_chunk_transform_export(hdf_path):
 
 def test_slice_export(hdf_path, channel, output_path):
     lmf = LightMicroscopyHDF(hdf_path)
-    e_cmd = ExportSlicesCmd(channel_name=channel, output_path=output_path, input_orientation="PSR",
+    e_cmd = export.ExportSlicesCmd(channel_name=channel, output_path=output_path, input_orientation="PSR",
                             input_resolution_level=1, slicing_range=[20, 400, 2], axis=1,
                             extract_roi=[1, 1, 500, 500],
                             ref_channel=None, ref_level=None)
