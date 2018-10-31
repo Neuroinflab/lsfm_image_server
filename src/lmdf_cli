@@ -72,8 +72,8 @@ class LmdfIO(object):
         channel.write_affine(affine_name, affine_path)
         lmf.close()
 
-    def export_slices(self, hdf_path, channel_name, output_path, input_orientation,
-                      input_resolution_level, slicing_range, axis, extract_roi=None):
+    def export_slices(self, hdf_path, channel_name, input_orientation,
+                      input_resolution_level, slicing_range, axis, output_path=None, extract_roi=None):
         """
 
         :param hdf_path: path to the source HDF5 file
@@ -96,8 +96,9 @@ class LmdfIO(object):
                                      slicing_range=slicing_range, axis=axis,
                                      extract_roi=extract_roi,
                                      ref_channel=None, ref_level=None)
-        lmf.export_slices(export_cmd)
-        lmf.close()
+
+        return lmf.export_slices(export_cmd)
+        # lmf.close()
 
     def export(self, hdf_path, channel_name, output_path=None, output_resolution=None, input_orientation='RAS',
                input_resolution_level=None, phys_origin=None, phys_size=None,
@@ -133,10 +134,7 @@ class LmdfIO(object):
                                segmentation_name=segmentation_name, region_id=region_id,
                                grid_size=grid_size, overlap_mm=overlap_mm)
 
-        try:
-            return lmf.export_image(export_cmd)
-        finally:
-            lmf.close()
+        return lmf.export_image(export_cmd)
 
     def add_transform(self, ordn, name, transform_type, invert=True):
         """
