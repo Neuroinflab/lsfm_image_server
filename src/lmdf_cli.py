@@ -6,7 +6,10 @@ import json
 import logging
 import dump_metadata as dm
 
-from lmdf import ExportCmd, LightMicroscopyHDF, TransformTuple, ImageProxy, ExportSlicesCmd
+from lmdf import LightMicroscopyHDF
+from transforms import TransformTuple
+from image import ImageProxy
+from export import ExportSlicesCmd, ExportCmd
 
 logging.basicConfig(level=logging.DEBUG,
                     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
@@ -135,10 +138,6 @@ class LmdfIO(object):
                                grid_size=grid_size, overlap_mm=overlap_mm)
 
         return lmf.export_image(export_cmd)
-        '''try:
-            return lmf.export_image(export_cmd)
-        finally:
-            lmf.close()'''
 
     def add_transform(self, ordn, name, transform_type, invert=True):
         """
