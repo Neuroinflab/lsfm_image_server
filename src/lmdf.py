@@ -643,9 +643,9 @@ class HDFChannel(object):
             "\n\nAffines:\n {} \n" \
             "\n\nDisplacement Fields:\n {} \n" \
             "\n\nPyramid levels:\n {}".format(self.channel_name,
-                                               affines,
-                                               displacement_fields,
-                                               pyramid_levels)
+                                              affines,
+                                              displacement_fields,
+                                              pyramid_levels)
 
         return r
 
