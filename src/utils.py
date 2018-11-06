@@ -109,6 +109,10 @@ class PathUtil(object):
         return cls._lsfm_deformation_field_format_str.format(case_id, df_name)
 
     @classmethod
+    def get_lsfm_dfs_path(cls, case_id):
+        return cls._lsfm_deformation_fields_str.format(case_id)
+
+    @classmethod
     def get_lsfm_df_data_path(cls, case_id, df_name):
         return cls._lsfm_deformation_field_data_format_str.format(case_id, df_name)
 
