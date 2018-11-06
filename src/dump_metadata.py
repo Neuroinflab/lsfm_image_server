@@ -291,6 +291,7 @@ if __name__ == "__main__":
     meta_data = getImageMetaDataClass(file_path)(file_path)
 
     print meta_data
+    print "Please make sure that voxel sizes are in mm."
     if args.output_file is not None:
         with open(args.output_file, 'w') as fp:
             json.dump(meta_data, fp)
