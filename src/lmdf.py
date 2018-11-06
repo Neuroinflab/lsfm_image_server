@@ -114,6 +114,16 @@ class LightMicroscopyHDF(object):
                                                                                 cmd_line))
         self.h5_file.create_dataset(name=log_path, data=cmd_line)
 
+    def get_logs(self):
+        log_header, log_data = [], []
+
+        def visit_log(name, obj):
+            log_header.append(name)
+            log_data.append(str(obj[...]))
+
+        self.h5_file[PathUtil.get_logs_path()].visititems(visit_log)
+        return zip(log_header, log_data)
+
     def close(self):
         self.h5_file.close()
 

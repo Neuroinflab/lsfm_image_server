@@ -175,6 +175,18 @@ class LmdfIO(object):
 
         lmf.close()
 
+    def show_log(self, hdf_path):
+
+        self.hdf_path = hdf_path
+        lmf = LightMicroscopyHDF(self.hdf_path)
+        logs = lmf.get_logs()
+        lmf.close()
+
+        for k, v in logs:
+            print("------------ {} ------------\n".format(k))
+            print(v)
+            print("\n########################################################\n\n\n")
+
     def add_metadata(self, hdf_path, m_key, m_value):
         """
         Add arbitrary metadata as key value pair.
