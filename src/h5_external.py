@@ -17,7 +17,7 @@ class H5_Repacker(object):
     _CMD_DECOMPRESS = 'NONE'
 
     @staticmethod
-    def tools_avalable():
+    def tools_available():
         if spawn.find_executable('h5repack') is None:
             return False
         return True
@@ -30,7 +30,7 @@ class H5_Repacker(object):
         :return:
         """
 
-        if H5_Repacker.tools_avalable():
+        if H5_Repacker.tools_available():
             subprocess.Popen([cls._CMD_REPACK, fname_in, fname_out]).wait()
 
     @classmethod
@@ -40,7 +40,7 @@ class H5_Repacker(object):
         :param fname_in:
         :return:
         """
-        if H5_Repacker.tools_avalable():
+        if H5_Repacker.tools_available():
             subprocess.Popen([cls._CMD_REPACK, '-f', cls._CMD_COMPRESS, fname_in, fname_out]).wait()
 
     @classmethod
@@ -50,8 +50,9 @@ class H5_Repacker(object):
         :param fname_in:
         :return:
         """
-        if H5_Repacker.tools_avalable():
+        if H5_Repacker.tools_available():
             subprocess.Popen([cls._CMD_REPACK, '-f', cls._CMD_DECOMPRESS, fname_in, fname_out]).wait()
+
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description='Repack HDF5 file to delete data from it, or to compress it',
