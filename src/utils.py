@@ -15,7 +15,7 @@ class ImageComponentType(Enum):
     SEGMENTATION = 2
 
 
-class PathUtil():
+class PathUtil(object):
 
     _group_format_str = 't{:0>5}/s{:0>2}/{:}'
     _cells_format_str = '{:}/cells'
@@ -28,14 +28,32 @@ class PathUtil():
     _lsfm_image_level_str = 'LSFM/{:}/IMAGE/{:}/cells'
     _lsfm_metadata_format_str = 'LSFM/{:}/METADATA'
     _lsfm_affine_format_str = 'LSFM/{:}/AFFINES/{:}'
+    _lsfm_affines_group_format_str = 'LSFM/{:}/AFFINES'
     _lsfm_affine_itk_params_format_str = 'LSFM/{:}/AFFINES/ITK_PARAMS/{:}'
     _lsfm_affine_itk_fixed_params_format_str = 'LSFM/{:}/AFFINES/FIXED_ITK_PARAMS/{:}'
     _lsfm_deformation_field_format_str = 'LSFM/{:}/DEFORMATION_FIELDS/{:}'
+    _lsfm_deformation_fields_str = 'LSFM/{:}/DEFORMATION_FIELDS'
     _lsfm_deformation_field_data_format_str = 'LSFM/{:}/DEFORMATION_FIELDS/{:}/cells'
+    _log_format_str = 'log/{:%Y-%m-%d_%H:%M:%S}_{:}'
+    _logs_str = 'log/'
+    _extended_metadata_str = '/extended_metadata'
 
     @classmethod
-    def get_lsfm_id_path(cls, id):
-        return cls._lsfm_id_format_str.format(id)
+    def get_extended_metadata_path(cls):
+        return cls._extended_metadata_str
+
+    @classmethod
+    def get_logs_path(cls):
+        return cls._logs_str
+
+    @classmethod
+    def get_log_path(cls, timestamp, cmd_name):
+        return cls._log_format_str.format(timestamp,
+                                          cmd_name)
+
+    @classmethod
+    def get_lsfm_id_path(cls, _id):
+        return cls._lsfm_id_format_str.format(_id)
 
     @classmethod
     def get_setup_path(cls, setup):
@@ -76,6 +94,10 @@ class PathUtil():
     @classmethod
     def get_lsfm_affine_path(cls, case_id, affine_name):
         return cls._lsfm_affine_format_str.format(case_id, affine_name)
+
+    @classmethod
+    def get_lsfm_affines_group_path(cls, case_id):
+        return cls._lsfm_affines_group_format_str.format(case_id)
 
     @classmethod
     def get_lsfm_affine_itk_path(cls, case_id, affine_name):
