@@ -26,7 +26,6 @@
 import os
 import sys
 import json
-import tqdm
 import h5py
 import copy
 import errno
@@ -34,7 +33,6 @@ import imageio
 import inspect
 import h5py_cache
 
-import tifffile as tf
 import numpy as np
 import nibabel as nib
 import SimpleITK as sitk
@@ -49,9 +47,6 @@ import dump_metadata as dm
 import constants as const
 
 from utils import PathUtil
-from utils import InputImageType
-from lxml import etree
-from collections import namedtuple
 from scipy.misc import imsave
 
 import logging
