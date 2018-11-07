@@ -22,7 +22,8 @@
 #    along with this software.  If not, see http://www.gnu.org/licenses/.     #
 #                                                                             #
 ###############################################################################
-
+import os
+import sys
 import fire
 import json
 import logging
@@ -112,6 +113,9 @@ class LmdfIO(object):
         :return:
         """
 
+        if not os.path.isfile(hdf_path):
+            sys.exit("File not found!")
+
         self.hdf_path = hdf_path
         lmf = LightMicroscopyHDF(self.hdf_path, access_mode='a')
 
@@ -146,6 +150,9 @@ class LmdfIO(object):
         :param overlap_mm: overlap for chunk export (in mm!)
         :return:
         """
+
+        if not os.path.isfile(hdf_path):
+            sys.exit("File not found!")
 
         self.hdf_path = hdf_path
         lmf = LightMicroscopyHDF(self.hdf_path, 'a')
@@ -187,6 +194,10 @@ class LmdfIO(object):
         :param channel_name: Print information only concerning specified channel.
         :return: None
         """
+
+        if not os.path.isfile(hdf_path):
+            sys.exit("File not found!")
+
         self.hdf_path = hdf_path
         lmf = LightMicroscopyHDF(self.hdf_path)
 
