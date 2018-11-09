@@ -32,7 +32,7 @@ import nibabel as nib
 import tifffile as tf
 import SimpleITK as sitk
 
-from utils import InputImageType
+from utils import InputImageType, parallel_read_image
 
 logging.basicConfig(level=logging.ERROR)
 logger = logging.getLogger(__name__)
@@ -327,10 +327,10 @@ class StreamableTiffProxy(ImageProxy):
                 next_indices = np.arange(current_idx, self.data_shape[0])
             try:
                 logger.debug("Next stream slice: {}".format(next_indices))
-                data = self._read_image(self._craft_img_path(next_indices[0]))
-                for idx in tqdm.tqdm(next_indices[1:]):
-                    next_data = self._read_image(self._craft_img_path(idx))
-                    data = np.dstack(([data, next_data]))
+                paths = [self._craft_img_path(n) for n in next_indices]
+                data = parallel_read_image(paths)
+                data = np.dstack(np.array(sorted(data, key=lambda x: x[1]))[:, 0])
+                logger.debug("done reading and sorting")
             except IOError:
                 logger.error("Could not open file", exc_info=True)
                 raise
