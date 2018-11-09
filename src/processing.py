@@ -31,6 +31,7 @@ import nibabel as nib
 import constants as const
 
 logger = logging.getLogger(__name__)
+logger.setLevel(logging.DEBUG)
 
 
 def reverse_axes(data, reverse=[False, False, False]):
@@ -332,6 +333,8 @@ def resample_image(meta_image, scale_factors, debug=False):
     output_image = resampler.Execute(sitk_image)
     output_image = sitk.Cast(output_image, meta_image.pixel_type)
 
+    logger.debug("spacing after resampling: {}".format(output_image.GetSpacing()))
+
     output_image = sitk.GetArrayFromImage(output_image)
     output_image = output_image.transpose(meta_image.transpose)
 
@@ -406,6 +409,7 @@ class MetaImage(object):
         logger.debug("Origin when creating meta image: {}".format(self.origin))
 
     def get_sitk_image(self):
+        logger.debug("copying data")
         img_data = self.data.copy()
         transpose_data = [2, 1, 0]
         if self.sitk_data.component_type == 'vector':
@@ -413,8 +417,9 @@ class MetaImage(object):
                 # img_data = img_data[:, :, :, 0, :]
                 transpose_data = np.arange(len(img_data.shape))
                 transpose_data[:3] = [2, 1, 0]
-
+        logger.debug("transposing data")
         img_data = img_data.transpose(self.transpose)
+        logger.debug("converting to sitk image array")
         img_data = sitk.GetImageFromArray(img_data)
         img_data.SetSpacing(self.voxel_size)
         img_data.SetOrigin(self.origin)
