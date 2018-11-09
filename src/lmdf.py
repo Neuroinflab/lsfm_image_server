@@ -86,7 +86,8 @@ class LightMicroscopyHDF(object):
         self.channels = dict()
 
         try:
-            # self.h5_file = h5py.File(self.file_path, 'a', libver='latest')
+            if not os.path.exists(os.path.dirname(self.file_path)):
+                os.makedirs(os.path.dirname(self.file_path))
             self.h5_file = h5py_cache.File(self.file_path, access_mode, chunk_cache_mem_size=1024 ** 3, libver='latest')
         except IOError as e:
             if e.errno == errno.EACCES:
