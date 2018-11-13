@@ -336,8 +336,10 @@ class StreamableTiffProxy(ImageProxy):
                 raise
 
             current_idx = current_idx + self.stack_size
-
-            yield data.transpose(2, 0, 1)
+            data = data.transpose(2, 0, 1)
+            data_chunk = np.zeros([self.stack_size, self.data_shape[1], self.data_shape[2]])
+            data_chunk[:data.shape[0], ...] = data
+            yield data_chunk
 
     def __repr__(self):
         return "The plane size is: {:.2f} GB, \nThe whole size is: {:.2f} GB" \
@@ -392,7 +394,10 @@ class StreamableOMEProxy(StreamableTiffProxy):
             next_indices = slice(current_idx, current_idx + self.stack_size)
             if current_idx + self.stack_size > self.data_shape[0]:
                 next_indices = slice(current_idx, current_idx + self.overhead_stack_shape[0])
-            data = tiff_file.asarray(next_indices, 0)[:next_indices.stop - next_indices.start]
+            data = np.zeros([self.stack_size, self.data_shape[1], self.data_shape[2]])
+            data[:next_indices.stop - next_indices.start, ...] = tiff_file.asarray(next_indices,
+                                                                                   0)[:next_indices.stop -
+                                                                                       next_indices.start]
             current_idx += self.stack_size
             yield data
 
