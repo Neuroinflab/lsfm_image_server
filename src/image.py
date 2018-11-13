@@ -35,6 +35,7 @@ from utils import InputImageType, parallel_read_image
 
 logging.basicConfig(level=logging.ERROR)
 logger = logging.getLogger(__name__)
+logger.setLevel(logging.DEBUG)
 
 
 class ImageProxy(object):
