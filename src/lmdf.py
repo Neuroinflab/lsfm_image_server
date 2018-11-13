@@ -242,7 +242,7 @@ class LightMicroscopyHDF(object):
 
             data_idx = 0
             for data in _channel.image.stream_data():
-                meta_image = image.MetaImage.meta_image_from_channel(data, _channel)
+                meta_image = processing.MetaImage.meta_image_from_channel(data, _channel)
                 if _channel.image.is_stream:
                     logger.debug("Processing data : {}/{}".format(data_idx + 1,
                                                                   _channel.image.num_of_stacks))
