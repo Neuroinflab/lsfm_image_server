@@ -261,8 +261,9 @@ class LightMicroscopyHDF(object):
                             raise
                     else:
 
-                        # scale_factors = _channel.resolutions[level_num - 1] / _channel.resolutions[level_num]
                         scale_factors = _channel.relative_resolution_scales[level_num][:len(_channel.image.image_shape)]
+                        scale_factors[0] = float(_channel.levels[level_num].shape[0]) / \
+                                           _channel.levels[level_num-1].shape[0]
                         logger.debug("Scale factors for resampling: {}".format(scale_factors))
                         meta_image = processing.resample_image(meta_image, scale_factors)
                         writing_slice = slice(0, None)
@@ -968,7 +969,7 @@ class ProxyChannel(object):
         self.setup_path = PathUtil.get_setup_path(self.num_bdv_setup)
 
         self.resolutions, self.subdivisions = bdv.BigDataViewer.propose_mipmaps(self.image.voxel_size,
-                                                                            self.image.image_shape)
+                                                                                self.image.image_shape)
 
         if self.image.is_multichannel:
             additional_dimensions = len(self.image.data_shape) - 3
@@ -1021,36 +1022,26 @@ class ProxyChannel(object):
             shape[0] = int(round(self.levels[num_level - 1].__getattribute__(atr)[0] *
                                  self.relative_resolution_scales[num_level][0]))
 
-            overhead_shape = None
             stack_shape = shape.copy()
 
             if self.image.is_stream:
-                overhead_shape = np.uint16(self.levels[0].overhead_stack_shape *
-                                           self.relative_resolution_scales[level])
-
-                overhead_shape[0] = int(round(self.levels[0].overhead_stack_shape[0] *
-                                              self.relative_resolution_scales[level][0]))
-
-                shape[0] = shape[0] * self.image.num_of_stacks
-                shape[0] += overhead_shape[0]
+                shape[0] = shape[0] * (self.image.num_of_stacks + 1)
 
             logger.debug("Level: {}\n"
                          "SHAPE: {}\n"
                          "STACK SHAPE: {}\n"
-                         "OVERHEAD STACKSHAPE: {}\n"
-                         "N of stacks: {}".format(num_level, shape, stack_shape, overhead_shape,
+                         "N of stacks: {}".format(num_level, shape, stack_shape,
                                                   self.image.num_of_stacks))
 
             pyramid_level.shape = shape
             pyramid_level.stack_shape = stack_shape
-            pyramid_level.overhead_stack_shape = overhead_shape
 
         pyramid_level = ProxyChannel.PyramidLevel()
         pyramid_level.id = 0
-        pyramid_level.shape = self.image.data_shape
+        pyramid_level.shape = self.image.data_shape.copy()
+        pyramid_level.shape[0] = self.image.stack_shape[0] * (self.image.num_of_stacks + 1)
         pyramid_level.spacing = self.image.voxel_size
         pyramid_level.stack_shape = self.image.stack_shape
-        pyramid_level.overhead_stack_shape = self.image.overhead_stack_shape
         pyramid_level.path = PathUtil.get_lsfm_image_cells_path(self.image.channel_name, 0)
         pyramid_level.bdv_path = PathUtil.get_cells_path(0, self.num_bdv_setup, 0)
         pyramid_level.chunks = tuple(self.subdivisions[0])
@@ -1080,10 +1071,8 @@ class ProxyChannel(object):
     class PyramidLevel(object):
         def __repr__(self):
             return "stack shape: {} \n" \
-                   "overhead stack shape: {}\n" \
                    "level shape: {}\n" \
                    "level spacing: {}\n".format(self.stack_shape,
-                                                self.overhead_stack_shape,
                                                 self.shape,
                                                 self.spacing)
 
