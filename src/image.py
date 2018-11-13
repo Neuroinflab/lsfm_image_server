@@ -24,7 +24,6 @@
 ###############################################################################
 
 import os
-import tqdm
 import logging
 
 import numpy as np
