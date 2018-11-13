@@ -34,9 +34,6 @@ from transforms import TransformTuple
 from image import ImageProxy
 from export import ExportSlicesCmd, ExportCmd
 
-logging.basicConfig(level=logging.DEBUG,
-                    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
-
 
 class LmdfIO(object):
     def __init__(self):
