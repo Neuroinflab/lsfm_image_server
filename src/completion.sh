@@ -28,6 +28,11 @@ _complete-lmdf_clipy()
     return 0
   fi
 
+  if [[ "$prev" == "--image-path" ]] ; then
+    COMPREPLY=( $(compgen -o plusdirs -o nospace -f -X '!*.tif' -- ${cur}) )
+    return 0
+  fi
+
   if [[ "$start" == "./lmdf_cli.py info" ]] ; then
     opts="--channel-name --hdf-path"
   fi
