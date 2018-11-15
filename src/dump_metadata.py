@@ -110,6 +110,15 @@ class ImageMetaData(dict):
         else:
             raise AttributeError("No such attribute: " + name)
 
+    def sanitize_types(self):
+        self["image_size_x"] = np.int(self["image_size_x"])
+        self["image_size_y"] = np.int(self["image_size_y"])
+        self["image_size_z"] = np.int(self["image_size_z"])
+        self["voxel_size_x"] = np.float64(self["voxel_size_x"])
+        self["voxel_size_y"] = np.float64(self["voxel_size_y"])
+        self["voxel_size_z"] = np.float64(self["voxel_size_z"])
+        self["bits_per_sample"] = np.int(self["bits_per_sample"])
+
 
 class TiffImageMetaData(ImageMetaData):
     """
