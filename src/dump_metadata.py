@@ -32,9 +32,10 @@ Each class is completely responsible for parsing its files appropriately.
 Example usage:
 dump_metadata.py --input-file=example.nii.gz --output-file=metadata.json
 """
-
+import os
 import sys
 import json
+import glob
 import argparse
 
 import numpy as np
@@ -292,6 +293,20 @@ if __name__ == "__main__":
 
     print meta_data
     print "Please make sure that voxel sizes are in mm."
+
+    fill_in = raw_input("Do you want to fill in missing values now? (y/n) \n")
+
+    if fill_in.lower() == 'y':
+        tifs_in_folder = len(glob.glob(os.path.join(os.path.dirname(file_path), '*.tif')))
+        print("Found {} tif files in file path".format(tifs_in_folder))
+        for k, v in meta_data.iteritems():
+            if not v:
+                new_val = raw_input("{}:\n".format(k))
+                meta_data.update({k: float(new_val)})
+        meta_data.sanitize_types()
+
+    print meta_data
+
     if args.output_file is not None:
         with open(args.output_file, 'w') as fp:
             json.dump(meta_data, fp)
