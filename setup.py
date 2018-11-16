@@ -14,9 +14,25 @@ setuptools.setup(
     url="https://github.com/pypa/sampleproject",
     packages=setuptools.find_packages(),
     classifiers=[
+        "Development Status :: 3 - Alpha"
         "Programming Language :: Python :: 2.7",
         "License :: OSI Approved :: GNU General Public License v3 (GPLv3)",
         "Operating System :: POSIX :: Linux",
         "Intended Audience :: Science/Research"
+        "Topic :: Scientific/Engineering"
+        "Natural Language :: English"
     ],
+    install_requires=[
+        "SimpleITK",
+        "enum34",
+        "fire",
+        "h5py",
+        "h5py_cache",
+        "imageio",
+        "lxml",
+        "nibabel",
+        "numpy",
+        "scipy",
+        "tifffile==0.12.1"
+        ]
 )
