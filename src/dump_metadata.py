@@ -296,22 +296,41 @@ if __name__ == "__main__":
                         help="Path to output json file",
                         type=str)
 
+    parser.add_argument('--ref',
+                        required=False,
+                        help="Fill in missing values from another json",
+                        default=None,
+                        type=str)
+
     args = parser.parse_args()
     file_path = args.input_file
     meta_data = getImageMetaDataClass(file_path)(file_path)
+    ref_path = args.ref
 
     print meta_data
     print "Please make sure that voxel sizes are in mm."
+    if not ref_path:
+        fill_in = raw_input("Do you want to fill in missing values now? (y/n) \n")
 
-    fill_in = raw_input("Do you want to fill in missing values now? (y/n) \n")
+        if fill_in.lower() == 'y':
+            tifs_in_folder = len(glob.glob(os.path.join(os.path.dirname(file_path), '*.tif')))
+            print("Found {} tif files in file path".format(tifs_in_folder))
+            for k, v in meta_data.iteritems():
+                if not v:
+                    new_val = raw_input("{}:\n".format(k))
+                    meta_data.update({k: float(new_val)})
+            meta_data.sanitize_types()
 
-    if fill_in.lower() == 'y':
-        tifs_in_folder = len(glob.glob(os.path.join(os.path.dirname(file_path), '*.tif')))
-        print("Found {} tif files in file path".format(tifs_in_folder))
-        for k, v in meta_data.iteritems():
-            if not v:
-                new_val = raw_input("{}:\n".format(k))
-                meta_data.update({k: float(new_val)})
+    else:
+        with open(ref_path) as fp:
+            ref_meta = json.load(fp)
+        for k in ['voxel_size_x', 'voxel_size_y', 'voxel_size_z']:
+            if not meta_data[k]:
+                meta_data.update({k: ref_meta[k]})
+            if not meta_data['image_size_z']:
+                tifs_in_folder = len(glob.glob(os.path.join(os.path.dirname(file_path), '*.tif')))
+                meta_data.update({'image_size_z': int(tifs_in_folder)})
+
         meta_data.sanitize_types()
 
     print meta_data
