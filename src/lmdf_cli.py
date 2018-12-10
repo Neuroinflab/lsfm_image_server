@@ -42,7 +42,7 @@ class LmdfIO_CLI(object):
         self.list_of_transforms = []
 
     def write(self, hdf_path, channel_name, image_path, bdv_xml, metadata_path=None,
-              slab_memory_size=2., file_name_format=None, is_multichannel=False, is_segmentation=False):
+              slab_memory_size=2., file_name_format=None, is_multichannel=False, is_segmentation=False, n_cpus=15):
         """
         Write image data, affine transformations, displacement fields and segmentation
         into HDF5 file.
@@ -76,7 +76,7 @@ class LmdfIO_CLI(object):
         self.logger.debug(meta)
 
         ip = ImageProxy.get_image_proxy_class(meta)(channel_name, 'whatever', file_name_format, meta, bdv_xml,
-                                                    slab_memory_size, 'RAS', is_multichannel, is_segmentation)
+                                                    slab_memory_size, 'RAS', is_multichannel, is_segmentation, n_cpus)
 
         lmf = LightMicroscopyHDF(self.hdf_path)
         lmf.write_channel(ip)
@@ -253,7 +253,7 @@ class LmdfIO(object):
         self._lmf = None
 
     def write(self, hdf_path, channel_name, image_path, bdv_xml, metadata_path=None,
-              slab_memory_size=2., file_name_format=None, is_multichannel=False, is_segmentation=False):
+              slab_memory_size=2., file_name_format=None, is_multichannel=False, is_segmentation=False, n_cpus=15):
         """
         Write image data, affine transformations, displacement fields and segmentation
         into HDF5 file.
@@ -283,7 +283,7 @@ class LmdfIO(object):
                 self.logger.error("File could not be opened", exc_info=True)
         self.logger.debug(meta)
         ip = ImageProxy.get_image_proxy_class(meta)(channel_name, 'whatever', file_name_format, meta, bdv_xml,
-                                                    slab_memory_size, 'RAS', is_multichannel, is_segmentation)
+                                                    slab_memory_size, 'RAS', is_multichannel, is_segmentation, n_cpus)
         lmf = self.lmf_handle
         lmf.write_channel(ip)
 
@@ -315,7 +315,7 @@ class LmdfIO(object):
         :return:
         """
         self.hdf_path = hdf_path
-        lmf =  self.lmf_handle
+        lmf = self.lmf_handle
         export_cmd = ExportSlicesCmd(channel_name=channel_name, output_path=output_path,
                                      input_orientation=input_orientation,
                                      input_resolution_level=input_resolution_level,

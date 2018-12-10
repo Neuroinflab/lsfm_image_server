@@ -31,7 +31,7 @@ import nibabel as nib
 import tifffile as tf
 import SimpleITK as sitk
 
-from utils import InputImageType, parallel_read_image
+from utils import InputImageType, parallelize, read_image
 
 logging.basicConfig(level=logging.ERROR)
 logger = logging.getLogger(__name__)
@@ -48,7 +48,8 @@ class ImageProxy(object):
                  RAM_limit,
                  orientation='RAS',
                  is_multichannel=False,
-                 is_segmentation=False):
+                 is_segmentation=False,
+                 n_cpus=15):
 
         self.channel_name = channel_name
         self.xml_file_name = xml_file_name
@@ -59,6 +60,7 @@ class ImageProxy(object):
         self.is_multichannel = is_multichannel
         self.is_segmentation = is_segmentation
         self.orientation = orientation
+        self.n_cpus = n_cpus
 
         self.pixel_type = self._get_pixel_type()
         self.direction = (-1.0, 0.0, 0.0,
@@ -317,6 +319,7 @@ class StreamableTiffProxy(ImageProxy):
 
     def stream_data(self):
         assert ImageProxy.get_available_ram() > self.stack_size * self.plane_size
+        parallel_read_image = parallelize(read_image, self.n_cpus)
 
         current_idx = 0
         while current_idx < self.data_shape[0]:
