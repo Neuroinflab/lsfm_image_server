@@ -35,10 +35,10 @@ from image import ImageProxy
 from export import ExportSlicesCmd, ExportCmd
 
 
-class LmdfIO(object):
+class LmdfIO_CLI(object):
     def __init__(self):
         self.hdf_path = None
-        self.logger = logging.getLogger("LmdfIO")
+        self.logger = logging.getLogger("LmdfIO_CLI")
         self.list_of_transforms = []
 
     def write(self, hdf_path, channel_name, image_path, metadata_path, bdv_xml,
@@ -236,4 +236,4 @@ class LmdfIO(object):
 
 
 if __name__ == '__main__':
-    fire.Fire(LmdfIO)
+    fire.Fire(LmdfIO_CLI)
