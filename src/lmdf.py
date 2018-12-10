@@ -375,9 +375,9 @@ class HDFChannel(object):
             self.is_segmentation = False
             self.pixel_type = 3
 
-        if self.is_segmentation:
-            logger.debug("{} ".format(self.is_segmentation))
-            logger.debug("{} is segmentation".format(self.channel_name))
+        # if self.is_segmentation:
+        #    logger.debug("{} ".format(self.is_segmentation))
+        #    logger.debug("{} is segmentation".format(self.channel_name))
         self._populate_pyramid_levels()
 
     def _get_image_data_path(self, _level=0):
@@ -461,7 +461,7 @@ class HDFChannel(object):
             sys.exit()
 
         df_level = df_channel.pyramid_levels[0]
-        cmd = export.ExportCmd(None, None, None, 'RAS', 0, [], None, None, None, None, None, None)
+        cmd = export.ExportCmd(None, None, None, 'RAS', 0, [], None, None, None, None, None, None, None)
         df = df_level.get_meta_image(cmd)
         df = sitk.Cast(df, sitk.sitkVectorFloat64)
         dft = sitk.DisplacementFieldTransform(df)
@@ -475,7 +475,7 @@ class HDFChannel(object):
             sys.exit()
 
         seg_level = seg_channel.pyramid_levels[0]
-        cmd = export.ExportCmd(None, None, None, 'RAS', 0, [], None, None, None, None, None, None)
+        cmd = export.ExportCmd(None, None, None, 'RAS', 0, [], None, None, None, None, None, None, None)
         seg = seg_level.get_meta_image(cmd)
         seg = sitk.Cast(seg, sitk.sitkInt16)
         return seg
@@ -489,7 +489,7 @@ class HDFChannel(object):
 
         ref_channel_level = ref_channel.pyramid_levels[0]
         ref_channel_level.is_nifti = True
-        cmd = export.ExportCmd(None, None, None, 'RAS', 0, [], None, None, None, None, None, None)
+        cmd = export.ExportCmd(None, None, None, 'RAS', 0, [], None, None, None, None, None, None, None)
         ref_meta_image = ref_channel_level.get_meta_image(cmd)
         return ref_meta_image
 
