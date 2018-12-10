@@ -1051,7 +1051,8 @@ class ProxyChannel(object):
         pyramid_level = ProxyChannel.PyramidLevel()
         pyramid_level.id = 0
         pyramid_level.shape = self.image.data_shape.copy()
-        pyramid_level.shape[0] = self.image.stack_shape[0] * (self.image.num_of_stacks + 1)
+        if self.image.is_stream:
+            pyramid_level.shape[0] = self.image.stack_shape[0] * (self.image.num_of_stacks + 1)
         pyramid_level.spacing = self.image.voxel_size
         pyramid_level.stack_shape = self.image.stack_shape
         pyramid_level.path = PathUtil.get_lsfm_image_cells_path(self.image.channel_name, 0)
