@@ -110,12 +110,16 @@ class ImageExporter(object):
 
         self.chunk = processing.apply_transformations(self.meta_image, self.ct)
 
+    def _resize_chunk(self):
+        pass
+
     def process(self):
         self._compute_indices()
         self._prepare_chunk()
         self._transpose_chunk()
         self._resample_chunk()
         self._transform_chunk()
+        self._resize_chunk()
 
         return self.chunk
 
@@ -128,10 +132,32 @@ class ImageRegionExporter(ImageExporter):
 
         self.start_is_mm = self.export_cmd.segmentation.TransformIndexToPhysicalPoint(self.start)
         self.end_is_mm = self.export_cmd.segmentation.TransformIndexToPhysicalPoint(self.end)
+        if self.export_cmd.region_size:
+            logger.debug("start_is before margin: {}".format(self.start_is_mm))
+            logger.debug("end_is_mm before margin: {}".format(self.end_is_mm))
+            seg_spacing = np.array(self.export_cmd.segmentation.GetSpacing())
+            region_size = np.array(self.end) - np.array(self.start)
+            region_size_mm = region_size * seg_spacing
+            output_size_mm = self.export_cmd.output_resolution * self.export_cmd.region_size
+            margin_mm = (output_size_mm - region_size_mm) / 2.
+            margin_mm += self.export_cmd.output_resolution
+            if np.any(margin_mm < 0):
+                logger.info("WARNING, ROI TO SMALL")
+            self.start_is_mm -= (margin_mm * np.array([1., 1., -1.]))
+            self.end_is_mm += (margin_mm * np.array([1., 1., -1.]))
+            logger.debug("start_is after margin: {}".format(self.start_is_mm))
+            logger.debug("end_is_mm after margin: {}".format(self.end_is_mm))
         self.start_index = np.abs(np.around(self.affine_pv.TransformPoint(self.start_is_mm)).astype(np.int))
         self.end_index = np.abs(np.around(self.affine_pv.TransformPoint(self.end_is_mm)).astype(np.int))
         self.start_index = np.array(self.start_index)[self.transpose_tuple.inv_transpose]
         self.end_index = np.array(self.end_index)[self.transpose_tuple.inv_transpose]
+
+    def _resize_chunk(self):
+        if self.export_cmd.region_size:
+            if not np.all(np.array(self.chunk.GetSize()) == self.export_cmd.region_size):
+                logger.debug("Fixing size..")
+                self.chunk = processing.trim_image_to_size(self.chunk,
+                                                           self.export_cmd.region_size)
 
 
 class ImageWholeExporter(ImageExporter):
@@ -154,7 +180,7 @@ class ImageWholeExporter(ImageExporter):
 class ExportCmd(object):
     def __init__(self, channel_name, output_path, output_resolution, input_orientation,
                  input_resolution_level, list_of_transforms, phys_origin, phys_size,
-                 segmentation_name, region_id, grid_size, overlap_mm):
+                 segmentation_name, region_id, grid_size, overlap_mm, region_size):
         # type: (str, str, list, str, int, list, list, list) -> None
 
         self.channel_name = channel_name
@@ -180,6 +206,7 @@ class ExportCmd(object):
 
         self.segmentation_name = segmentation_name
         self.region_id = region_id
+        self.region_size = region_size
         self.segmentation = None
 
         self.grid_size = grid_size
