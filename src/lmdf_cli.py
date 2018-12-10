@@ -41,7 +41,7 @@ class LmdfIO_CLI(object):
         self.logger = logging.getLogger("LmdfIO_CLI")
         self.list_of_transforms = []
 
-    def write(self, hdf_path, channel_name, image_path, metadata_path, bdv_xml,
+    def write(self, hdf_path, channel_name, image_path, bdv_xml, metadata_path=None,
               slab_memory_size=2., file_name_format=None, is_multichannel=False, is_segmentation=False):
         """
         Write image data, affine transformations, displacement fields and segmentation
@@ -60,20 +60,23 @@ class LmdfIO_CLI(object):
         """
         meta = dm.ImageMetaData(image_path)
         self.hdf_path = hdf_path
-        try:
+        if not metadata_path:
+            meta = dm.getImageMetaDataClass(image_path)(image_path)
+        else:
+            try:
 
-            with open(metadata_path) as fp:
-                json_meta = json.load(fp)
-            meta.update(json_meta)
-        except dm.InvalidImageSourceException:
-            self.logger.error("Image type not recognized or file does not exist", exc_info=False)
-        except IOError:
-            self.logger.error("File could not be opened", exc_info=True)
+                with open(metadata_path) as fp:
+                    json_meta = json.load(fp)
+                meta.update(json_meta)
+            except dm.InvalidImageSourceException:
+                self.logger.error("Image type not recognized or file does not exist", exc_info=False)
+            except IOError:
+                self.logger.error("File could not be opened", exc_info=True)
 
         self.logger.debug(meta)
 
         ip = ImageProxy.get_image_proxy_class(meta)(channel_name, 'whatever', file_name_format, meta, bdv_xml,
-                                                    slab_memory_size, is_multichannel, is_segmentation)
+                                                    slab_memory_size, 'RAS', is_multichannel, is_segmentation)
 
         lmf = LightMicroscopyHDF(self.hdf_path)
         lmf.write_channel(ip)
