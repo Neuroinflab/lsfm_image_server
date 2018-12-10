@@ -123,11 +123,22 @@ class LightMicroscopyHDF(object):
         self.extended_metadata[m_key] = m_value
         self.h5_file.flush()
 
+    @logging_decor
+    def get_metadata(self, m_key):
+        try:
+            m_value = self.extended_metadata[m_key]
+        except KeyError:
+            logger.error("Key not found!")
+            return
+
+        return m_value
+
     def log_operation(self, cmd_name, cmd_line):
         if self.h5_file.mode == 'r':
             logger.info('File in read mode only, cannot log operations!')
             return
-        log_path = PathUtil.get_log_path(dt.datetime.now(), cmd_name)
+        log_path = PathUtil.get_log_path(dt.datetime.now(),
+                                         cmd_name + str(np.random.randint(10**5)))
         logger.debug('log path: {:} \n command-name: {:}\n command: {:}'.format(log_path,
                                                                                 cmd_name,
                                                                                 cmd_line))
