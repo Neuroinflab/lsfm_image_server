@@ -477,6 +477,7 @@ class NiftiProxy(ImageProxy):
             self.data = self.data[:, :, :, 0, :]
 
         self.data_shape = np.array(self.data.shape)
+        self.pixel_type = self._get_sitk_pixel_type()
 
         logger.debug("Pixel type for channel {}: {}".format(self.channel_name, self.pixel_type))
 
