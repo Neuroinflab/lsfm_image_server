@@ -131,7 +131,7 @@ class LmdfIO_CLI(object):
 
     def export(self, hdf_path, channel_name, output_path=None, output_resolution=None, input_orientation='RAS',
                input_resolution_level=None, phys_origin=None, phys_size=None,
-               segmentation_name=None, region_id=None, grid_size=None, overlap_mm=None):
+               segmentation_name=None, region_id=None, grid_size=None, overlap_mm=None, region_size=None):
         """
         Export image data at desired resolution, volume, and physical coordinates, with optional transformation
         to a reference space. Save to a file or to memory for further processing.
@@ -158,13 +158,13 @@ class LmdfIO_CLI(object):
         lmf = LightMicroscopyHDF(self.hdf_path, 'a')
         self.logger.debug("resolution: {}".format(output_resolution))
 
-        export_cmd = ExportCmd(channel_name=channel_name, output_path=output_path,
+        export_cmd = ExportCmd(channel_name=str(channel_name), output_path=output_path,
                                output_resolution=output_resolution,
                                input_orientation=input_orientation, input_resolution_level=input_resolution_level,
                                list_of_transforms=self.list_of_transforms,
                                phys_origin=phys_origin, phys_size=phys_size,
                                segmentation_name=segmentation_name, region_id=region_id,
-                               grid_size=grid_size, overlap_mm=overlap_mm)
+                               grid_size=grid_size, overlap_mm=overlap_mm, region_size=region_size)
 
         return lmf.export_image(export_cmd)
 
