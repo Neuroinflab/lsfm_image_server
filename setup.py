@@ -4,7 +4,7 @@ with open("README.rst", "r") as fh:
     long_description = fh.read()
 
 setuptools.setup(
-    name="lsfm_image_server",
+    name="lsfmpy",
     version="0.0.1",
     author="Sylwia Bednarek, Piotr Majka",
     author_email="s.bednarek@nencki.gov.pl",
