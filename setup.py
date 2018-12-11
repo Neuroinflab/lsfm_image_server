@@ -11,8 +11,9 @@ setuptools.setup(
     description="HDF5-based software for storing and managing voluminous 3D imaging data",
     long_description=long_description,
     long_description_content_type="text/markdown",
-    url="https://github.com/pypa/sampleproject",
+    url="https://github.com/Neuroinflab/lsfm_image_server",
     packages=setuptools.find_packages(),
+    scripts=['bin/lsfmpy', 'bin/dump_metadata'],
     classifiers=[
         "Development Status :: 3 - Alpha"
         "Programming Language :: Python :: 2.7",
@@ -21,6 +22,7 @@ setuptools.setup(
         "Intended Audience :: Science/Research"
         "Topic :: Scientific/Engineering"
         "Natural Language :: English"
+        "Environment :: Console",
     ],
     install_requires=[
         "SimpleITK",
