@@ -38,8 +38,8 @@ def parallelize(function, n_processes=None):
     function : the function that will be parallelized. The FIRST
         argument is the one to be iterated on (in parallel). The other
         arguments are the same in all the parallel runs of the function
-        (they can be named or unnamedarguments).
-    nprocesses : int, the number of processes to run. Default is None.
+        (they can be named or unnamed arguments).
+    n_processes : int, the number of processes to run. Default is None.
         It is passed to multiprocessing.Pool (see that for details).
 
     Output
