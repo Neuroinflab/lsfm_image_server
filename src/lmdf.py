@@ -1107,7 +1107,7 @@ def test_proxy(input_path, json_path):
     for data_chunk in ip.stream_data():
         if k > 0:
             return
-        print data_chunk.shape
+        print(data_chunk.shape)
         k += 1
 
 
@@ -1129,7 +1129,7 @@ def test_lmdhf(image_path, json_path, hdf_path, multichannel=False):
 
     lm_test = LightMicroscopyHDF(hdf_path)
     lm_test.write_channel(ip)
-    print lm_test
+    print(lm_test)
     # lm_test.channels[0].export_image(level=4)
 
     # print lm_test.number_of_channels
