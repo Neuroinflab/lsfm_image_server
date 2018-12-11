@@ -77,6 +77,14 @@ def create_dummy_image(size, direction, spacing, origin, pixel_id):
     return img
 
 
+def trim_image_to_size(img, size):
+    roi_filter = sitk.RegionOfInterestImageFilter()
+    roi_filter.SetIndex((0, 0, 0))
+    roi_filter.SetSize(size)
+    out_img = roi_filter.Execute(img)
+    return out_img
+
+
 def trim_image_to_label_region(img, labels, reg_id, margin=0):
     """
     Trims intensity image to bounding box determined by label (region_id)
