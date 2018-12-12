@@ -12,6 +12,7 @@ setuptools.setup(
     long_description=long_description,
     long_description_content_type="text/markdown",
     url="https://github.com/Neuroinflab/lsfm_image_server",
+    licence="GPLv3",
     packages=setuptools.find_packages(),
     scripts=['bin/lsfmpy', 'bin/dump_metadata'],
     classifiers=[
@@ -19,9 +20,9 @@ setuptools.setup(
         "Programming Language :: Python :: 2.7",
         "License :: OSI Approved :: GNU General Public License v3 (GPLv3)",
         "Operating System :: POSIX :: Linux",
-        "Intended Audience :: Science/Research"
-        "Topic :: Scientific/Engineering"
-        "Natural Language :: English"
+        "Intended Audience :: Science/Research",
+        "Topic :: Scientific/Engineering",
+        "Natural Language :: English",
         "Environment :: Console",
     ],
     install_requires=[
