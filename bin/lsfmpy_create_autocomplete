@@ -106,8 +106,7 @@ complete -F _complete-lsfmpy lsfmpy
 """
 
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser(description='Wil create autocomplete script for lsfmpy (bash only)'
-                                                 'default: ~/.lsfmpy_autocomplete',
+    parser = argparse.ArgumentParser(description='Wil create autocomplete script for lsfmpy (bash only)',
                                      prog='lsfmpy_create_autocomplete')
 
     parser.add_argument('--output-file',
