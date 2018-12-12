@@ -111,9 +111,8 @@ if __name__ == "__main__":
                                      prog='lsfmpy_create_autocomplete')
 
     parser.add_argument('--output-file',
-                        required=False,
-                        default='~/.lsfmpy_autocomplete',
-                        help='Path to output json file',
+                        required=True,
+                        help='path to output autocomplete script',
                         type=str)
 
     args = parser.parse_args()
