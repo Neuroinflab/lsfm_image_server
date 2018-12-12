@@ -22,6 +22,3 @@
 #    along with this software.  If not, see http://www.gnu.org/licenses/.     #
 #                                                                             #
 ###############################################################################
-
-from lmdf_cli import LmdfIO_CLI
-from dump_metadata import getImageMetaDataClass
