@@ -14,7 +14,7 @@ setuptools.setup(
     url="https://github.com/Neuroinflab/lsfm_image_server",
     licence="GPLv3",
     packages=setuptools.find_packages(),
-    scripts=['bin/lsfmpy', 'bin/dump_metadata'],
+    scripts=['bin/lsfmpy', 'bin/dump_metadata', 'bin/lsfmpy_create_autocomplete'],
     classifiers=[
         "Development Status :: 3 - Alpha"
         "Programming Language :: Python :: 2.7",
