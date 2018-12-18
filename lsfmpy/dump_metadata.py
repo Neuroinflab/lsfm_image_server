@@ -198,7 +198,10 @@ class ImageJTiffImageMetaData(ImageMetaData):
 
             self["voxel_size_x"] = np.float64(voxel_size_x)
             self["voxel_size_y"] = np.float64(voxel_size_y)
-            self["voxel_size_z"] = np.float64(page.imagej_tags['spacing'])
+            try:
+                self["voxel_size_z"] = np.float64(page.imagej_tags['spacing'])
+            except KeyError:
+                self["voxel_size_z"] = 0
             self["bits_per_sample"] = page.bits_per_sample
             self["file_type"] = self.__class__.__name__[:-13]
 
