@@ -16,7 +16,7 @@ setuptools.setup(
     packages=setuptools.find_packages(),
     scripts=['bin/lsfmpy', 'bin/dump_metadata', 'bin/lsfmpy_create_autocomplete'],
     classifiers=[
-        "Development Status :: 3 - Alpha"
+        "Development Status :: 3 - Alpha",
         "Programming Language :: Python :: 2.7",
         "License :: OSI Approved :: GNU General Public License v3 (GPLv3)",
         "Operating System :: POSIX :: Linux",
