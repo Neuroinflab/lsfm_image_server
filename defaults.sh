@@ -167,8 +167,8 @@ function TransformToNativeSpace {
 
 C_HI_RES=10
 C_LO_RES=25
-C_HI_RES_MM=`python -c "print ${C_HI_RES}./1000" | tr -d '\n'`
-C_LO_RES_MM=`python -c "print ${C_LO_RES}./1000" | tr -d '\n'`
+C_HI_RES_MM=`python -c "print(${C_HI_RES}./1000)" | tr -d '\n'`
+C_LO_RES_MM=`python -c "print(${C_LO_RES}./1000)" | tr -d '\n'`
 
 IMG_STRUCT_PHYSICAL001_LO=`GetStructuralImage 001 ${C_LO_RES} mm`
 IMG_STRUCT_PHYSICAL001_HI=`GetStructuralImage 001 ${C_HI_RES} mm`
