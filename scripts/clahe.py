@@ -3,7 +3,6 @@
 
 import sys
 
-import nifti
 import nibabel as nib
 from skimage import data, exposure, img_as_float
 
@@ -33,7 +32,6 @@ for i in range(imd.shape[0]):
     print(i)
     im3[i,:,:] = exposure.equalize_adapthist(im3[i,:,:], clip_limit=clip_limit_)
 
-#nifti.NiftiImage((im1 + im2 + im3) / 3., image.header).save(output_file)
 
 img = (im1 + im2 + im3) / 3.
 img = nib.Nifti1Image(img, image.affine, header=image.header)

@@ -1,7 +1,6 @@
 #!/usr/bin/env python
 # encoding: utf-8
 
-#This is a modified version (nifti -> nibabel)
 
 
 """
@@ -27,7 +26,6 @@ import os
 import sys
 import argparse
 
-#import nifti
 import nibabel as nib
 import SimpleITK as sitk
 
@@ -42,8 +40,6 @@ def rescale_displacement_field(args):
     output_df = args.output_displacement
     transform_file = args.reference_transform
 
-    #displacement_field = nifti.NiftiImage(input_df)
-    #displacement = displacement_field.data
 
     displacement_field = nib.load(input_df)
     displacement = displacement_field.get_data()
@@ -53,15 +49,11 @@ def rescale_displacement_field(args):
     print(("SCALING FACTORS: {}".format(scaling_factors)))
     print(("DISPLACEMENT SHAPE: {}".format(displacement.shape)))
 
-    #displacement[0, :, :, :, :] /= scaling_factors[0]
-    #displacement[1, :, :, :, :] /= scaling_factors[1]
-    #displacement[2, :, :, :, :] /= scaling_factors[2]
 
     displacement[:, :, :, :, 0] /= scaling_factors[0]
     displacement[:, :, :, :, 1] /= scaling_factors[1]
     displacement[:, :, :, :, 2] /= scaling_factors[2]
 
-    #nifti.NiftiImage(displacement, displacement_field.header).save(args.output_displacement)
 
     img = nib.Nifti1Image(displacement, displacement_field.affine, header=displacement_field.header)
     nib.save(img, args.output_displacement)
