@@ -85,7 +85,6 @@ function AffineCoregistration {
                 --initial-moving-transform ${REG_OUTPUT}/initial_affine.txt \
                 --metric "Mattes[${AFFINE_REG_FIXED},${AFFINE_REG_MOVING},1,32,regular]" \
                 --transform "Affine[0.5]" \
-                --regularization "Gauss[3,0]" \
                 --convergence 10000x10000x10000x00000 \
                 --shrink-factors 4x3x2x1 \
                 --smoothing-sigmas 0x0x0x0 \
