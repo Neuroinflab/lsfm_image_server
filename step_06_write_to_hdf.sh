@@ -11,28 +11,52 @@ HDF5_SRC_PATH=./${CASE_ID}.h5
 HDF5_CFOS_CHANNEL_NAME=cfos
 HDF5_AUTO_CHANNEL_NAME=autofluo
 
+
+# to save displacement fields and segmentations we first need their metadata
+dump_metadata --input-file `GetDisplacementFieldFilename structural 001 forward` \
+	--output-file forward_warp.json << EOF
+n
+EOF
+
+dump_metadata --input-file `GetDisplacementFieldFilename structural 001 inverse` \
+	--output-file inverse_warp.json << EOF
+n
+EOF
+
+dump_metadata --input-file `GetResultImageFilename segmentation signal-001-25 deformable` \
+	--output-file cfos_segmentation.json << EOF
+n
+EOF
+
+dump_metadata --input-file `GetResultImageFilename segmentation structural-001-25 deformable` \
+	--output-file auto_segmentation.json << EOF
+n
+EOF
+
 # write the affine for mapping between signal and structural channel
 lsfmpy write-affine \
     --hdf-path ${HDF5_SRC_PATH} \
-    # save it to signal channel
     --channel-name ${HDF5_CFOS_CHANNEL_NAME} \
-    # a unique name for the transformation
     --affine-name  signal_to_structural \
-    # where to read the transform from
     --affine-path ${DIR_TRANSFORMS}/structure_001_to_signal_001_physical_affine.txt
+
+sleep 1
 
 lsfmpy write-affine \
     --hdf-path ${HDF5_SRC_PATH} \
     --channel-name ${HDF5_CFOS_CHANNEL_NAME} \
     --affine-name  structural_to_template \
-    --affine-path ${DIR_TRANSFORMS}/template_right_physical_to_structural_001_Affine.txt
+    --affine-path ${DIR_TRANSFORMS}/template_left_physical_to_structural_001_Affine.txt
+
+sleep 1
 
 lsfmpy write-affine \
     --hdf-path ${HDF5_SRC_PATH} \
     --channel-name ${HDF5_AUTO_CHANNEL_NAME} \
     --affine-name  structural_to_template \
-    --affine-path ${DIR_TRANSFORMS}/template_right_physical_to_structural_001_Affine.txt
+    --affine-path ${DIR_TRANSFORMS}/template_left_physical_to_structural_001_Affine.txt
 
+sleep 1
 
 ### This section saves the displacement fields ###
 
@@ -41,9 +65,7 @@ lsfmpy write \
     --channel-name forward_warp \
     --image-path `GetDisplacementFieldFilename structural 001 forward` \
     --metadata-path forward_warp.json \
-    # this is a multichannel data
     --is-multichannel True \
-    # do not rewrite the xml file
     --bdv-xml None 
 
 lsfmpy write \
@@ -61,7 +83,6 @@ lsfmpy write \
     --channel-name cfos_segmentation \
     --image-path `GetResultImageFilename segmentation signal-001-25 deformable` \
     --metadata-path cfos_segmentation.json \
-    # indicate that this is a segmentation
     --is-segmentation True \
     --bdv-xml None 
 
