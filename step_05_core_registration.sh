@@ -122,7 +122,7 @@ function DeformableCoregistration {
             --continue-affine false \
             --number-of-affine-iterations 10000x10000x10000x10000x10000 \
             --rigid-affine false \
-            --use-Histogram-Matching true \
+            --use-Histogram-Matching 1 \
             --affine-gradient-descent-option 0.1x0.5x5.e-6x5.e-6 \
             -i ${LSFM_ANTS_ITERATIONS} \
             -o ${REG_OUTPUT} \
