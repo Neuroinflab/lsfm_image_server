@@ -2,13 +2,13 @@
 
 source defaults.sh
 
-HDF5_SRC_PATH=../${CASE_ID}.h5
+HDF5_SRC_PATH=./${CASE_ID}.h5
 EXAMPLE_DIR=07_examples
 
 mkdir -p ${EXAMPLE_DIR}
 
 
-#Autofluorescence channel mapped to template at 10 µm:
+# Autofluorescence channel mapped to template at 10 µm:
 lsfmpy \
     add-transform \
 	--name inverse_warp \
@@ -26,7 +26,9 @@ lsfmpy \
 	--hdf-path ${HDF5_SRC_PATH} \
 	--input-orientation RPI
 
-#Cfos channel mapped to template at 10 µm:
+sleep 1
+
+# Cfos channel mapped to template at 10 µm:
 lsfmpy \
     add-transform \
 	--transform-type affine \
@@ -48,8 +50,10 @@ lsfmpy \
 	--output-path ${EXAMPLE_DIR}/${CASE_ID}_cfos_in_template_10um.nii.gz \
 	--hdf-path ${HDF5_SRC_PATH} \
 	--input-orientation RPI
+	
+sleep 1
 
-#Basolateral Amygdala, anterior part in signal channel at 10 µm:
+# Basolateral Amygdala, anterior part in signal channel at 10 µm:
 lsfmpy \
     export \
 	--hdf-path ${HDF5_SRC_PATH} \
@@ -60,7 +64,9 @@ lsfmpy \
 	--region_id 303 \
 	--input-orientation RPI
 
-#Anterodorsal thalamic nucleus in signal channel mapped to template at 2 µm:
+sleep 1
+
+# Anterodorsal thalamic nucleus in signal channel mapped to template at 2 µm:
 lsfmpy \
     add-transform \
 	--transform-type affine \
@@ -84,6 +90,8 @@ lsfmpy \
 	--input-orientation RPI \
 	--segmentation-name cfos_segmentation \
 	--region_id 64
+
+sleep 1
 
 # Native resolution chunk at arbitrary physical location
 lsfmpy \
