@@ -1,3 +1,11 @@
+.. image:: https://badge.fury.io/py/lsfmpy.svg
+    :target: https://badge.fury.io/py/lsfmpy
+    :alt: PyPI badge
+
+.. image:: https://img.shields.io/badge/License-GPL%20v3-blue.svg
+    :target: https://www.gnu.org/licenses/gpl-3.0
+    :alt: License: GPL v3 badge
+    
 lsfmpy python library
 =====================
 
