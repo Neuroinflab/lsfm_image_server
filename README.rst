@@ -11,6 +11,8 @@
     :target: https://doi.org/10.18150/NIDUBW
     :alt: DOI badge
     
+<img src="https://raw.githubusercontent.com/Neuroinflab/lsfm_image_server/lsfm_schema/media/thumbnail.png" align="left" alt="logo" width="80" height="80">
+
 LSFMPy - python library for processing 3D light sheet fluorescence microscopy images
 =====================
 
