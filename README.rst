@@ -1,3 +1,4 @@
+
 .. image:: https://badge.fury.io/py/lsfmpy.svg
     :target: https://badge.fury.io/py/lsfmpy
     :alt: PyPI badge
@@ -10,7 +11,7 @@
     :target: https://doi.org/10.18150/NIDUBW
     :alt: DOI badge
     
-lsfmpy python library
+LSFMPy - python library for processing 3D light sheet fluorescence microscopy images
 =====================
 
 
