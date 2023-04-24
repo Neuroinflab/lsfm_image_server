@@ -6,6 +6,10 @@
     :target: https://www.gnu.org/licenses/gpl-3.0
     :alt: License: GPL v3 badge
     
+.. image:: https://img.shields.io/badge/DOI-10.18150%2FNIDUBWC-informational
+    :target: https://doi.org/10.18150/NIDUBW
+    :alt: DOI badge
+    
 lsfmpy python library
 =====================
 
