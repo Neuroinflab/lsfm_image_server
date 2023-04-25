@@ -21,7 +21,7 @@ LSFMPy - python library for processing 3D light sheet fluorescence microscopy im
  * [Usage examples](#usage-examples)
 
 ### Basic Overview
-
+The primary motivation for creating this package is to enable efficient manipulation of large, three-dimensional image datasets whilst preserving precise spatial information and facilitating spatial transformations. This is particularly useful in neuroscience, where the additional layer of information about localization in specific brain regions is crucial for proper data interpretation and analyzis.
  
 
 ### Setup
