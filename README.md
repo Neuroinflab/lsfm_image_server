@@ -183,4 +183,21 @@ Co-register the two channels to make sure that we know the spatial transformatio
 ```bash
 bash step_03_signal_and_structural_coregistration.sh
 ```
+Finally, register the structural channel to the template.
+You can choose from three different default settings, determining registration fidelity and speed: 
+- lsfm_set_mapping_affine       - coregistration with atlas set to affine only
+- lsfm_set_mapping_overnight    - coregistration with atlas set to low quality deformable
+- lsfm_set_mapping_high_quality - coregistration with atlas set to high quality deformable
+
+```bash
+source functions.sh
+
+# load setting for high quality mapping:
+lsfm_set_mapping_high_quality
+bash step_04_set_up_template_coregistration.sh
+# before proceeding with registration, the script will check if following executables are available:
+# mkdir rm cp tar WarpImageMultiTransform c3d antsRegistration
+# this will also execute step_05_core_registration.sh
+```
+
 ### Usage examples
