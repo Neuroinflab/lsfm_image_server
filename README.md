@@ -9,12 +9,28 @@
 
 LSFMPy - python library for processing 3D light sheet fluorescence microscopy images
 =====================
+
+Contents
+========
+
+ * [Basic Overview](#basic-overview)
+ * [Installation](#installation)
+ * [Usage](#usage)
+ * [Git Integration](#git-integration)
+ * [What can I back up?](#what-can-i-back-up)
+ * [Configuration](#configuration)
+ * [Output Structure](#output-structure)
+ * [Reinstalling Dotfiles](#reinstalling-dotfiles)
+ * [Want to contribute?](#want-to-contribute)
+
+
+
 ### Basic Overview
 
 <p align="center"><img width=75% src=https://github.com/Neuroinflab/lsfm_image_server/blob/lsfm_schema/media/lsfmpy-github-fig-contents.png?raw="true"></img></p>
  
 
-### Last Stable Release
+### Installation
 ```bash
 pip install lsfmpy
 ```
