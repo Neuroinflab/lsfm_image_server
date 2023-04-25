@@ -1,6 +1,6 @@
 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
-&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+
 ![Python](https://img.shields.io/badge/python-v3.8+-blue.svg)
 [![pypy](https://badge.fury.io/py/lsfmpy.svg)](https://badge.fury.io/py/lsfmpy)
 [![DOI](https://img.shields.io/badge/DOI-10.18150%2FNIDUBWC-informational)](https://doi.org/10.18150/NIDUBW)
@@ -12,7 +12,7 @@
 LSFMPy - python library for processing 3D light sheet fluorescence microscopy images
 =====================
 
-<p align="center"><img width=55% src=https://github.com/Neuroinflab/lsfm_image_server/blob/lsfm_schema/media/lsfmpy-github-fig-contents.png?raw="true"></img></p>
+<p align="center"><img width=65% src=https://github.com/Neuroinflab/lsfm_image_server/blob/lsfm_schema/media/lsfmpy-github-fig-contents.png?raw="true"></img></p>
 
 ### Contents
 
