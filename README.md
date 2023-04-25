@@ -1,11 +1,13 @@
-
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
 ![Python](https://img.shields.io/badge/python-v3.8+-blue.svg)
 [![pypy](https://badge.fury.io/py/lsfmpy.svg)](https://badge.fury.io/py/lsfmpy)
 [![DOI](https://img.shields.io/badge/DOI-10.18150%2FNIDUBWC-informational)](https://doi.org/10.18150/NIDUBW)
-[![License](https://img.shields.io/badge/License-GPL%20v3-blue.svg)](https://www.gnu.org/licenses/gpl-3.0)
+[![License](https://img.shields.io/badge/License-GPL%20v3-blue.svg)](https://www.gnu.org/licenses/gpl-3.0) 
 
 
-<img src="https://raw.githubusercontent.com/Neuroinflab/lsfm_image_server/lsfm_schema/media/thumbnail.png" align="left" alt="logo" width="70" height="70"/>
+<img src="https://raw.githubusercontent.com/Neuroinflab/lsfm_image_server/lsfm_schema/media/thumbnail.png" align="left" alt="logo" width="90" height="90"/>
 
 LSFMPy - python library for processing 3D light sheet fluorescence microscopy images
 =====================
@@ -111,12 +113,13 @@ lsfmpy_tutorial/
 	
 ```
 ### Image conversion
-- Prepare the metadata json file
+**Prepare the metadata json file**
+
 You will be asked to fill the following information for the autofluorescence image:
-image_size_z 490
-voxel_size_y 0.00145
-voxel_size_x 0.00145
-voxel_size_z 0.01
+- image_size_z 490
+- voxel_size_y 0.00145
+- voxel_size_x 0.00145
+- voxel_size_z 0.01
 ```bash
 cd ${TUTORIAL}
 dump_metadata \
@@ -124,10 +127,10 @@ dump_metadata \
 	--output-file ./autofluo.json
 ```
 You will be asked to fill the following information for the cfos image:
-image_size_z 1265
-voxel_size_y 0.00145
-voxel_size_x 0.00145
-voxel_size_z 0.004
+- image_size_z 1265
+- voxel_size_y 0.00145
+- voxel_size_x 0.00145
+- voxel_size_z 0.004
 ```bash
 cd ${TUTORIAL}
 dump_metadata \
