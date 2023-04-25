@@ -73,22 +73,22 @@ unzip *. zip
 
 ```bash
 lsfmpy_tutorial/
-├── defaults.sh		# set up constants and logging
-├── case_id 		   # unique specimen ID
-├── step_00_download_data.sh 
-├── step_01_set_up_images.sh 
-├── step_02_preprocess.sh
-├── step_03_signal_and_structural_coregistration.sh
-├── step_04_set_up_template_coregistration.sh
-├── step_05_core_registration.sh
-├── step_06_write_to_hdf.sh
-├── step_07_examples.sh
-├── functions.sh 	# convenience functions for setting registration fidelity
-├── scripts       # python scripts (should work with python 2.7 and 3.8)
-│   ├── header_converter.py
-│   ├── clahe.py
-│   ├── rescale_displacement_field.py
-│   ├── tqdm.py
+└── defaults.sh		# set up constants and logging
+└── case_id 		   # unique specimen ID
+└── step_00_download_data.sh 
+└── step_01_set_up_images.sh 
+└── step_02_preprocess.sh
+└── step_03_signal_and_structural_coregistration.sh
+└── step_04_set_up_template_coregistration.sh
+└── step_05_core_registration.sh
+└── step_06_write_to_hdf.sh
+└── step_07_examples.sh
+└── functions.sh 	# convenience functions for setting registration fidelity
+├── scripts       	# python scripts (should work with python 2.7 and 3.8)
+│   └── header_converter.py
+│   └── clahe.py
+│   └── rescale_displacement_field.py
+│   └── tqdm.py
 ├── example_data/
 │   └── autofluorescence/
 │   │   └── Z000000.tif
@@ -199,5 +199,18 @@ bash step_04_set_up_template_coregistration.sh
 # mkdir rm cp tar WarpImageMultiTransform c3d antsRegistration
 # this will also execute step_05_core_registration.sh
 ```
-
+```shell
+lsfmpy_tutorial/
+└── example_data/	
+└── 00_reference/	# preprocessed allen ccfv3	
+└── 01_input_data/	# images exported for registration
+└── workdir_fixed_{md5}_moving_{md5}/ 
+└── 02_preprocessed_input_images/ # preprocessed images
+└── 03_coregistration/ 		# signal channel mapped to structural channel
+└── 04_transforms/		# affine and deformable transformations
+└── 05_results/			# both channels mapped to template, 
+				# template and segmentation mapped to the physical space of 
+				# signal and structural image
+```
 ### Usage examples
+
