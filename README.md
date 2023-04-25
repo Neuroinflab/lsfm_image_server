@@ -173,8 +173,14 @@ Export images at 25 µm isotropic resolution:
 bash step_01_set_up_images.sh 
 ```
 
-Run image prerocessing before the registration:
+Run image preprocessing before the registration:
 ```bash
 bash step_02_preprocess.sh
+```
+
+Co-register the two channels to make sure that we know the spatial transformations between the structural (autofluorescence) and signal (cfos) channels:
+
+```bash
+bash step_03_signal_and_structural_coregistration.sh
 ```
 ### Usage examples
