@@ -22,7 +22,7 @@ LSFMPy - python library for processing 3D light sheet fluorescence microscopy im
  * [Usage examples](#usage-examples)
 
 ### Basic Overview
-The primary motivation for creating this package is to enable efficient manipulation of large, three-dimensional image datasets whilst preserving precise spatial information and facilitating spatial transformations. This is particularly useful in neuroscience, where the additional layer of information about localization in specific brain regions is crucial for proper data interpretation and analyzis.
+The primary motivation for creating this package is to enable efficient manipulation of large, three-dimensional image datasets whilst preserving precise spatial information and facilitating spatial transformations. This is particularly useful in neuroscience, where the additional layer of information about localization in specific brain regions is crucial for proper interpretation and integration of experimental data.
  
 
 ### Setup
@@ -110,13 +110,30 @@ lsfmpy_tutorial/
         └── 001_25_mm_mask.nii.gz # mask outlining the brain matter in autofluorescence channel
 	
 ```
-The example_data folder contains two subfolders with image series of autofluorescence and cfos signal of an intact murine hemisphere imaged in the sagittal plane. The TIFF files were stitched with BigStitcher (Hörl et al., 2019) plugin for Fiji ImageJ and denoised with the VSNR algorithm (Fehrenbach et al., 2012). For image registration, the 00_reference folder contains preprocessed template (template.nii.gz) and segmentation (segmentation.nii.gz) from the Allen Mouse CCF v3 at 25 µm voxel resolution, together with a label description file (labels.txt) and template mask which was manually adjusted to match the specific brain registered. In the 01_input_data directory you will find masks for each imaging channel (00_signal corresponds to the cfos channel, and 01_structural corresponds to the autofluorescence channel).
-
-
-
-
 ### Image conversion
-
+- Prepare the metadata json file
+You will be asked to fill the following information for the autofluorescence image:
+image_size_z 490
+voxel_size_y 0.00145
+voxel_size_x 0.00145
+voxel_size_z 0.01
+```bash
+cd ${TUTORIAL}
+dump_metadata \
+	--input-file ./example_data/autofluorescence/Z000000.tif \
+	--output-file ./autofluo.json
+```
+You will be asked to fill the following information for the cfos image:
+image_size_z 1265
+voxel_size_y 0.00145
+voxel_size_x 0.00145
+voxel_size_z 0.004
+```bash
+cd ${TUTORIAL}
+dump_metadata \
+	--input-file ./example_data/cfos/Z000000.tif \
+	--output-file ./cfos.json
+```
 
 ### Image registration
 
