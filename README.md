@@ -135,8 +135,46 @@ dump_metadata \
 	--input-file ./example_data/cfos/Z000000.tif \
 	--output-file ./cfos.json
 ```
+**Image conversion**
 
+Let's start with the autofluorescence channel:
+```bash
+lsfmpy \
+    # use the write command
+    write \
+        # path to the target hdf file,
+	  # which will be created if not found
+        --hdf-path ./000001.h5 \
+	  # path to image metadata
+        --metadata-path ./autofluo.json \
+	  #  file name pattern 
+        --file-name-format Z%06d.tif \
+	  # channel name for this modality
+        --channel-name autofluo \
+	  # path to first file in the sequence
+        --image-path ./example_data/autofluorescence/Z000000.tif \
+   	  # file name for BigDataViewer-compatible xml
+        --bdv-xml 000001.xml
+```
+
+```bash
+lsfmpy write \
+        --hdf-path ./000001.h5 \
+        --metadata-path ./cfos.json \
+        --file-name-format Z%06d.tif \
+        --channel-name cfos \
+        --image-path ./example_data/cfos/Z000000.tif \
+        --bdv-xml 000001.xml
+```
 ### Image registration
 
+Export images at 25 µm isotropic resolution:
+```bash
+bash step_01_set_up_images.sh 
+```
 
+Run image prerocessing before the registration:
+```bash
+bash step_02_preprocess.sh
+```
 ### Usage examples
