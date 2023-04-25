@@ -5,13 +5,17 @@
 [![License](https://img.shields.io/badge/License-GPL%20v3-blue.svg)](https://www.gnu.org/licenses/gpl-3.0)
 
 
-<img src="https://raw.githubusercontent.com/Neuroinflab/lsfm_image_server/lsfm_schema/media/thumbnail.png" align="left" alt="logo" width="80" height="80">
+<img src="https://raw.githubusercontent.com/Neuroinflab/lsfm_image_server/lsfm_schema/media/thumbnail.png" align="left" alt="logo" width="70" height="70"/>
 
 LSFMPy - python library for processing 3D light sheet fluorescence microscopy images
 =====================
+## Basic Overview
 
+<p align="center"><img width=75% src=https://github.com/Neuroinflab/lsfm_image_server/blob/lsfm_schema/media/lsfmpy-github-fig-contents.png?raw=true"/></p>
 
+<br>
 Functionality:
+ 
 --------------
 
 1. Writing:
