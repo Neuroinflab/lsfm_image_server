@@ -69,6 +69,47 @@ unzip *. zip
 # rm -f ${TUTORIAL}/example_data/autofluorescence/auto_channel_part_*.zip 
 # rm -f ${TUTORIAL}/example_data/cfos/cfos_channel_part_*.zip
 ```
+- The structure of the tutorial package:
+
+```bash
+lsfmpy_tutorial/
+├── defaults.sh		# set up constants and logging
+├── case_id 		   # unique specimen ID
+├── step_00_download_data.sh 
+├── step_01_set_up_images.sh 
+├── step_02_preprocess.sh
+├── step_03_signal_and_structural_coregistration.sh
+├── step_04_set_up_template_coregistration.sh
+├── step_05_core_registration.sh
+├── step_06_write_to_hdf.sh
+├── step_07_examples.sh
+├── functions.sh 	# convenience functions for setting registration fidelity
+├── scripts       # python scripts (should work with python 2.7 and 3.8)
+│   ├── header_converter.py
+│   ├── clahe.py
+│   ├── rescale_displacement_field.py
+│   ├── tqdm.py
+├── example_data/
+│   └── autofluorescence/
+│   │   └── Z000000.tif
+│   │   └── ...
+│   └── cfos/
+│   │   └── Z000000.tif
+│   │   └── ...
+└── 00_reference/
+│   └── template.nii.gz 
+│   └── segmentation.nii.gz 
+│   └── template_25um_both_hemispheres.nii.gz 
+│   └── segmentation_25um_both_hemispheres.nii.gz 
+│   └── labels.txt # labels for segmentation
+│   └── template_mask.nii.gz  	# template mask clipped to match the extent of the target brain image
+└── 01_input_data/
+    └── 00_signal/
+    │   └── 001_25_mm_mask.nii.gz # mask outlining the brain matter in signal channel
+    └── 01_structural/
+        └── 001_25_mm_mask.nii.gz # mask outlining the brain matter in autofluorescence channel
+	
+```
 
 ### Image conversion
 
