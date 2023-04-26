@@ -265,3 +265,35 @@ lsfmpy \
     --input-orientation RPI
 
 ```
+2. Export Anterodorsal nucleus region resampled to 2 µm resolution in signal channel, mapped to template
+
+<p align="center"><img width=65% src=https://raw.githubusercontent.com/Neuroinflab/lsfm_image_server/lsfm_schema/media/AD_cfos_in_template_2um.gif></img></p>
+
+```bash
+lsfmpy \
+    # specify the mapping from signal channel to the template
+    --add-transform \
+        --transform-type affine \
+        --name signal_to_structural \
+        --ordn 0 \
+        --invert True \
+    –-add-transform \
+        --name inverse_warp \
+        --ordn 1 \
+        --transform-type df \
+    –-add-transform \
+        --name structural_to_template \
+        --ordn 2 \
+        --transform-type affine \
+        --invert True \
+    # export Anterodorsal nucleus from the signal channel at 2 µm voxel size
+    -export \
+        --channel-name cfos \
+        --output-resolution 0.002,0.002,0.002 \
+        --output-path ./000001_cfos_in_template_AD_2um.nii.gz \
+        --hdf-path ./000001.h5 \
+        --input-orientation RPI \
+        --segmentation-name cfos_segmentation \
+        --region_id 64
+
+```
