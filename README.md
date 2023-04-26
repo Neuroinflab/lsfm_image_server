@@ -213,9 +213,53 @@ lsfmpy_tutorial/
 				# signal and structural image
 ```
 
-Save the results to the LSFMPy hdf file:
+5. After reviewing the result, save the computed transforms and the segmentation to the LSFMPy hdf file:
 ```bash
 bash step_06_write_to_hdf.sh
 ```
 ### Usage examples
 
+1.  Export the autofluorescence channel at 10 µm resolution, mapped to template
+
+```bash
+lsfmpy \
+    # you can iteratively add multiple transformations
+    # both affine and deformable, indicating the order
+    # in which they should be executed 
+    add-transform \
+	    # name of the transformation as it was written to the hdf file
+          --name inverse_warp \
+          # indicate the position of the transformation in the chain:
+          --ordn 0 \
+          # indicate type of transformation (deformable)
+    --transform-type df \
+
+
+    # add another transformation
+    - add-transform \
+    --name structural_to_template \
+    # this is second transformation in chain
+    --ordn 1 \
+    # this is an affine transformation
+    --transform-type affine \
+    # and it should be inverted
+    --invert True \
+	
+
+
+    # now we can export the data
+    - export \
+	    # from the autofluorescence channel
+    --channel-name autofluo \
+    # at 10 µm isotropic resolution
+    --output-resolution 0.01,0.01,0.01 \
+    # indicate output file
+    --output-path ./000001_auto_in_template_10um.nii.gz \
+    # indicate source hdf
+    --hdf-path ./000001.h5 \
+    # indicate anatomical orientation of the image
+    # (if you are not sure, set the orientation to RAS
+          # and check results in ITKSnap)
+    --input-orientation RPI
+
+```
