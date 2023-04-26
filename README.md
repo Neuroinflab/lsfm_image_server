@@ -221,6 +221,8 @@ bash step_06_write_to_hdf.sh
 
 1.  Export the autofluorescence channel at 10 µm resolution, mapped to template
 
+<p align="center"><img width=65% src=https://raw.githubusercontent.com/Neuroinflab/lsfm_image_server/lsfm_schema/media/auto_in_temp_10um.gif></img></p>
+
 ```bash
 lsfmpy \
     # you can iteratively add multiple transformations
