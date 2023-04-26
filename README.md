@@ -168,22 +168,22 @@ lsfmpy write \
 ```
 ### Image registration
 
-Export images at 25 µm isotropic resolution:
+1. Export images at 25 µm isotropic resolution:
 ```bash
 bash step_01_set_up_images.sh 
 ```
 
-Run image preprocessing before the registration:
+2. Run image preprocessing before the registration:
 ```bash
 bash step_02_preprocess.sh
 ```
 
-Co-register the two channels to make sure that we know the spatial transformations between the structural (autofluorescence) and signal (cfos) channels:
+3. Co-register the two channels to make sure that we know the spatial transformations between the structural (autofluorescence) and signal (cfos) channels:
 
 ```bash
 bash step_03_signal_and_structural_coregistration.sh
 ```
-Finally, register the structural channel to the template.
+4. Finally, register the structural channel to the template.
 You can choose from three different default settings, determining registration fidelity and speed: 
 - lsfm_set_mapping_affine       - coregistration with atlas set to affine only
 - lsfm_set_mapping_overnight    - coregistration with atlas set to low quality deformable
@@ -211,6 +211,11 @@ lsfmpy_tutorial/
 └── 05_results/			# both channels mapped to template, 
 				# template and segmentation mapped to the physical space of 
 				# signal and structural image
+```
+
+Save the results to the LSFMPy hdf file:
+```bash
+bash step_06_write_to_hdf.sh
 ```
 ### Usage examples
 
