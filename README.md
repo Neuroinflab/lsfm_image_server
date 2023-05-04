@@ -17,6 +17,7 @@ Tutorial for the LSFMPy library
  * [Technical notes](#technical-notes)
  * [Setup & Installation](#setup)
  * [Sample data download](#sample-data)
+ * [The structure of the tutorial package](#the-structure)
  * [Image conversion to the LSFMPy format](#image-conversion) 
  * [Image registration to the Allen Mouse Common Coordinate Framework v3 (CCF v3) template](#image-registration)
  * [Usage examples](#usage-examples)
@@ -43,7 +44,7 @@ FView](https://www.hdfgroup.org/downloads/hdfview/) or [ViTables](https://vitabl
 occupied by the file; only after using the [h5repack](https://manpages.ubuntu.com/manpages/lunar/man1/h5repack.1.html) tool will the disk space usage be reduced
 to reflect the updated hdf5 file contents
 
-### Setup
+### Setup & Installation
 ```bash
 pip install lsfmpy
 ```
@@ -87,7 +88,8 @@ unzip *. zip
 # rm -f ${TUTORIAL}/example_data/autofluorescence/auto_channel_part_*.zip 
 # rm -f ${TUTORIAL}/example_data/cfos/cfos_channel_part_*.zip
 ```
-- The structure of the tutorial package:
+
+### The structure of the tutorial package:
 
 The `example_data` folder contains two subfolders with image series of autofluorescence and cfos signal
 of an entire mouse brain hemisphere imaged in the sagittal plane [Fig. 1A-B](). The TIFF files have
