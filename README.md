@@ -15,7 +15,7 @@ Tutorial for the LSFMPy library
 
  * [Overview](#overview)
  * [Technical notes](#technical-notes)
- * [Setup & Installation](#setup)
+ * [Setup & Installation](#setup--installation)
  * [Sample data download](#sample-data)
  * [The structure of the tutorial package](#the-structure-of-the-tutorial-package)
  * [Image conversion to the LSFMPy format](#image-conversion) 
@@ -101,6 +101,9 @@ description file (`labels.txt`). For your convenience, the template mask has bee
 adjusted to match the brain being registered [Fig. 1C](). In the `01_input_data` directory, where
 00_signal corresponds to the cfos channel, and 01_structural corresponds to the autofluorescence
 channel, you will find masks for each imaging channel.
+<p align="center"><img width=65% src=https://github.com/Neuroinflab/lsfm_image_server/blob/tutorial/media/figure_S1.svg?raw="true"></img></p>
+
+
 ```bash
 lsfmpy_tutorial/
 └── defaults.sh		# set up constants and logging
