@@ -202,7 +202,11 @@ lsfmpy \
    	  # file name for BigDataViewer-compatible xml
         --bdv-xml 000001.xml
 ```
-
+Two new files should appear: `000001.h5` and `000001.xml`. The hdf5 file contains the image pyramid,
+while the accompanying xml file enables visualization the `BigDataViewer` plugin in `Fiji ImageJ`.
+Repeat the last step for the cfos channel. Note that this channel’s axial resolution is higher (4 µm)
+than the autofluorescence channel (10 µm). The output name of the xml file remains unchanged,
+and the file itself will be automatically updated to cover the new channel:
 ```bash
 lsfmpy write \
         --hdf-path ./000001.h5 \
