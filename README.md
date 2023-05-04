@@ -14,15 +14,21 @@ Tutorial for the LSFMPy library
 
 ### Contents
 
- * [Basic Overview](#basic-overview)
+ * [Overview](#overview)
  * [Setup](#setup)
- * [Sample data](#sample-data)
- * [Image conversion](#image-conversion)
+ * [Sample data download](#sample-data)
+ * [Image conversion](#image-conversion) to the LSFMPy format
  * [Image registration](#image-registration)
  * [Usage examples](#usage-examples)
 
-### Basic Overview
-The primary motivation for creating this package is to enable efficient manipulation of large, three-dimensional image datasets whilst preserving precise spatial information and facilitating spatial transformations. This is particularly useful in neuroscience, where the additional layer of information about localization in specific brain regions is crucial for proper interpretation and integration of experimental data.
+### Overview
+The following tutorial introduces the LSFMPy package and the accompanying registration pipeline.
+Data files used in this tutorial can be downloaded from the Repository for Open Data (mind the
+substantial size of the dataset: 63 GB). Images of a mouse brain hemisphere were acquired with
+a light sheet fluorescence microscope at two different excitation wavelengths, resulting in two com-
+plementary imaging channels. The first one represents the brain’s autofluorescence (488 nm), which
+reflects its anatomical structure. The second image shows the fluorescence from immunostained c-Fos
+transcription factor (638 nm), a known neuroplasticity marker.
  
 
 ### Setup
