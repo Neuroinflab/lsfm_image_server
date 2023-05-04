@@ -14,6 +14,7 @@ Tutorial for the LSFMPy library
 ### Contents
 
  * [Overview](#overview)
+ * [Technical notes](#technical-notes)
  * [Setup & Installation](#setup)
  * [Sample data download](#sample-data)
  * [Image conversion to the LSFMPy format](#image-conversion) 
@@ -30,6 +31,17 @@ plementary imaging channels. The first one represents the brain’s autofluoresc
 reflects its anatomical structure. The second image shows the fluorescence from immunostained c-Fos
 transcription factor (638 nm), a known neuroplasticity marker.
  
+### Technical notes
+
+* Basic familiarity with command line interfaces and with the Linux operating system is advised
+* For viewing nifti files, we recommend the ITK-SNAP application
+* For viewing hdf5 files created with the LSFMPy, we recommend standard tools such as HD-
+FView or ViTables
+* The default anatomical orientation for LSFMPy datasets and associated software follows the RAS
+(right-anterior-superior) convention
+* Removing large groups or datasets from an hdf5 file will not immediately free up disk space
+occupied by the file. Only after using the h5repack tool will the disk space usage be reduced
+to reflect the updated hdf5 file contents.
 
 ### Setup
 ```bash
