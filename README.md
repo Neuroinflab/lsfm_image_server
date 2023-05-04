@@ -90,13 +90,13 @@ unzip *. zip
 - The structure of the tutorial package:
 
 The `example_data` folder contains two subfolders with image series of autofluorescence and cfos signal
-of an entire mouse brain hemisphere imaged in the sagittal plane (Fig. 1A-B). The TIFF files have
-been already stitched with the freely available BigStitcher (Hörl et al., 2019) plugin for Fiji ImageJ
-and denoised with the VSNR algorithm (Fehrenbach et al., 2012). For the image registration, the
-00_reference folder contains preprocessed template (template.nii.gz) and segmentation of the
-Allen Mouse CCF v3 at 25 µm voxel resolution (segmentation.nii.gz), together with a label
-description file (labels.txt). For your convenience, the template mask has been already manually
-adjusted to match the brain being registered (Fig. 1C). In the 01_input_data directory, where
+of an entire mouse brain hemisphere imaged in the sagittal plane [Fig. 1A-B](). The TIFF files have
+been already stitched with the freely available `BigStitcher` (Hörl et al., 2019) plugin for Fiji ImageJ
+and denoised with the `VSNR algorithm` (Fehrenbach et al., 2012). For image registration, the
+00_reference folder contains preprocessed template (`template.nii.gz`) and segmentation of the
+Allen Mouse CCF v3 at 25 µm voxel resolution (`segmentation.nii.gz`), together with a label
+description file (`labels.txt`). For your convenience, the template mask has been already manually
+adjusted to match the brain being registered [Fig. 1C](). In the `01_input_data` directory, where
 00_signal corresponds to the cfos channel, and 01_structural corresponds to the autofluorescence
 channel, you will find masks for each imaging channel.
 ```bash
