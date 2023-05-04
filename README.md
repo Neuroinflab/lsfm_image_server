@@ -101,7 +101,9 @@ description file (`labels.txt`). For your convenience, the template mask has bee
 adjusted to match the brain being registered [Fig. 1C](). In the `01_input_data` directory, where
 00_signal corresponds to the cfos channel, and 01_structural corresponds to the autofluorescence
 channel, you will find masks for each imaging channel.
+
 <p align="center"><img width=65% src=https://github.com/Neuroinflab/lsfm_image_server/blob/tutorial/media/figure_S1.svg?raw="true"></img></p>
+
 **Figure 1: 3D image datasets included in this tutorial**. **A**, **B**: Example parasagittal cross-
 sections from stacks of images of autofluorescence (488 nm) and cfos (638 nm) channels, respectively.
 **C**: Template mask against the CCF3 template. The mask was clipped to include only those parts
@@ -150,7 +152,12 @@ lsfmpy_tutorial/
 	
 ```
 ### Image conversion
-**Prepare the metadata json file**
+**Prepare the metadata json file** Typically, the imaging hardware saves metadata in the header
+of the image files. While in the case of OME–TIFF series, the first file in the series will most likely
+contain the metadata, this cannot be guaranteed in all, in particular proprietary, imaging setups.
+While the LSFMPy attempts to automatically determine the necessary parameters, we ask the user
+to double-check those values or to provide them interactively or via the command line. Metadata
+can also be changed by modifying the automatically generated json files.
 
 You will be asked to fill the following information for the autofluorescence image:
 - image_size_z 490
