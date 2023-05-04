@@ -34,13 +34,13 @@ transcription factor (638 nm), a known neuroplasticity marker.
 ### Technical notes
 
 * Basic familiarity with command line interfaces and with the Linux operating system is advised
-* For viewing nifti files, we recommend the ITK-SNAP application
-* For viewing hdf5 files created with the LSFMPy, we recommend standard tools such as HD-
-FView or ViTables
+* For viewing nifti files, we recommend the [ITK-SNAP](http://www.itksnap.org/) application
+* For viewing hdf5 files created with the LSFMPy, we recommend standard tools such as [HD-
+FView](https://www.hdfgroup.org/downloads/hdfview/) or [ViTables](https://vitables.org/)
 * The default anatomical orientation for LSFMPy datasets and associated software follows the RAS
 (right-anterior-superior) convention
 * Removing large groups or datasets from an hdf5 file will not immediately free up disk space
-occupied by the file; only after using the h5repack tool will the disk space usage be reduced
+occupied by the file; only after using the [h5repack](https://manpages.ubuntu.com/manpages/lunar/man1/h5repack.1.html) tool will the disk space usage be reduced
 to reflect the updated hdf5 file contents
 
 ### Setup
@@ -89,6 +89,16 @@ unzip *. zip
 ```
 - The structure of the tutorial package:
 
+The `example_data` folder contains two subfolders with image series of autofluorescence and cfos signal
+of an entire mouse brain hemisphere imaged in the sagittal plane (Fig. 1A-B). The TIFF files have
+been already stitched with the freely available BigStitcher (Hörl et al., 2019) plugin for Fiji ImageJ
+and denoised with the VSNR algorithm (Fehrenbach et al., 2012). For the image registration, the
+00_reference folder contains preprocessed template (template.nii.gz) and segmentation of the
+Allen Mouse CCF v3 at 25 µm voxel resolution (segmentation.nii.gz), together with a label
+description file (labels.txt). For your convenience, the template mask has been already manually
+adjusted to match the brain being registered (Fig. 1C). In the 01_input_data directory, where
+00_signal corresponds to the cfos channel, and 01_structural corresponds to the autofluorescence
+channel, you will find masks for each imaging channel.
 ```bash
 lsfmpy_tutorial/
 └── defaults.sh		# set up constants and logging
