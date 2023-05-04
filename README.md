@@ -40,8 +40,8 @@ FView or ViTables
 * The default anatomical orientation for LSFMPy datasets and associated software follows the RAS
 (right-anterior-superior) convention
 * Removing large groups or datasets from an hdf5 file will not immediately free up disk space
-occupied by the file. Only after using the h5repack tool will the disk space usage be reduced
-to reflect the updated hdf5 file contents.
+occupied by the file; only after using the h5repack tool will the disk space usage be reduced
+to reflect the updated hdf5 file contents
 
 ### Setup
 ```bash
