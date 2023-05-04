@@ -17,7 +17,7 @@ Tutorial for the LSFMPy library
  * [Setup & Installation](#setup)
  * [Sample data download](#sample-data)
  * [Image conversion to the LSFMPy format](#image-conversion) 
- * [Image registration](#image-registration)
+ * [Image registration to the Allen Mouse Common Coordinate Framework v3 (CCF v3) template](#image-registration)
  * [Usage examples](#usage-examples)
 
 ### Overview
