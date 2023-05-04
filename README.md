@@ -5,8 +5,7 @@
 [![License](https://img.shields.io/badge/License-GPL%20v3-blue.svg)](https://www.gnu.org/licenses/gpl-3.0) 
 
 
-<img src="https://raw.githubusercontent.com/Neuroinflab/lsfm_image_server/lsfm_schema/media/thumbnail.png" align="left" alt="logo" width="90" height="90"/>
-
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<img src="https://raw.githubusercontent.com/Neuroinflab/lsfm_image_server/lsfm_schema/media/thumbnail.png" align="left" alt="logo" width="90" height="90"/>
 Tutorial for the LSFMPy library
 =====================
 
@@ -15,15 +14,16 @@ Tutorial for the LSFMPy library
 ### Contents
 
  * [Overview](#overview)
- * [Setup](#setup)
+ * [Setup & Installation](#setup)
  * [Sample data download](#sample-data)
- * [Image conversion](#image-conversion) to the LSFMPy format
+ * [Image conversion to the LSFMPy format](#image-conversion) 
  * [Image registration](#image-registration)
  * [Usage examples](#usage-examples)
 
 ### Overview
 The following tutorial introduces the LSFMPy package and the accompanying registration pipeline.
-Data files used in this tutorial can be downloaded from the Repository for Open Data (mind the
+Data files used in this tutorial can be downloaded from the [Repository for Open Data](https://doi.org/10.18150/NIDUBW)
+(mind the
 substantial size of the dataset: 63 GB). Images of a mouse brain hemisphere were acquired with
 a light sheet fluorescence microscope at two different excitation wavelengths, resulting in two com-
 plementary imaging channels. The first one represents the brain’s autofluorescence (488 nm), which
