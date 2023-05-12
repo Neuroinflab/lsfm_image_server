@@ -24,6 +24,7 @@
 ###############################################################################
 
 import os
+import zlib
 import logging
 
 import numpy as np
@@ -31,7 +32,7 @@ import nibabel as nib
 import tifffile as tf
 import SimpleITK as sitk
 
-from medpy import io as medio
+
 from .utils import InputImageType, parallelize, read_image
 
 logging.basicConfig(level=logging.ERROR)
@@ -250,9 +251,187 @@ class ImageProxy(object):
             return NiftiProxy
         elif meta.file_type == InputImageType.ImageJTiff.name or meta.file_type == InputImageType.Tiff.name:
             return NonStreamableTiffProxy
+        elif meta.file_type == InputImageType.Nrrd.name:
+            return StreamableNrrdProxy
 
         else:
             raise ValueError("Unsupported file format specified in image metadata")
+        
+
+class StreamableNrrdProxy(ImageProxy):
+    """
+    """
+
+    def __init__(self, *args, **kwargs):
+
+        super(StreamableNrrdProxy, self).__init__(*args, **kwargs)
+
+        try:
+            self.voxel_size = np.abs(np.array([self.metadata.voxel_size_z,
+                                        self.metadata.voxel_size_y,
+                                        self.metadata.voxel_size_x], dtype=np.float64))
+
+            self.data_shape = np.array([self.metadata.image_size_z,
+                                        self.metadata.image_size_y,
+                                        self.metadata.image_size_x], dtype=np.int32)
+
+            self.file_dir, self.file_name = os.path.split(self.metadata.data_path)
+
+            self.compressed = self.metadata.encoding != 'raw'
+
+            self.full_page = self.data_shape[1] * self.data_shape[2]
+            self.bytes_per_sample = int(self.metadata.bits_per_sample / 8)
+            
+
+            if self.metadata.data_type == 'float':
+                self.np_pixel_type = np.float32
+                self.pixel_type = sitk.sitkFloat32
+            elif self.metadata.data_type == 'unsigned char':
+                self.np_pixel_type = np.uint8
+            elif self.metadata.data_type == 'unsigned short':
+                self.np_pixel_type = np.uint16
+                self.pixel_type = sitk.sitkUInt16
+            elif self.metadata.data_type == 'unsigned int':
+                self.np_pixel_type = np.uint32
+            elif self.metadata.data_type == 'unsigned long':
+                self.np_pixel_type = np.uint64
+            elif self.metadata.data_type == 'char':
+                self.np_pixel_type = np.int8
+            elif self.metadata.data_type == 'short':
+                self.np_pixel_type = np.int16
+            elif self.metadata.data_type == 'int':
+                self.np_pixel_type = np.int32
+            elif self.metadata.data_type == 'long':
+                self.np_pixel_type = np.int64
+            elif self.metadata.data_type == 'double':
+                self.np_pixel_type = np.float64
+            elif self.metadata.data_type == 'long double':
+                self.np_pixel_type = np.float128
+
+
+            logger.debug("np Pixel type: {}".format(self.np_pixel_type))
+            logger.debug("Bytes per sample: {}".format(self.bytes_per_sample))
+            logger.debug("Bits per sample: {}".format(self.metadata.bits_per_sample))
+
+        except AttributeError:
+            logger.error("Attribute not found in metadata object", exc_info=True)
+            raise
+
+        self.is_stream = True
+        self.is_nifti = False
+        self.working_buffer = np.array([], dtype=self.np_pixel_type)
+        
+
+    @property
+    def stack_size(self):
+        stack_size = int(self.RAM_limit // self.plane_size)
+        if stack_size > self.data_shape[0]:
+            return self.data_shape[0]
+        else:
+            return stack_size
+        
+    @property
+    def data_type(self):
+        return self.np_pixel_type
+        
+    @property
+    def origin(self):
+        if "origin_z" in self.metadata:
+            origin = np.array([self.metadata.origin_z,
+                               self.metadata.origin_y,
+                               self.metadata.origin_x], dtype=np.float)
+        else:
+            origin = np.array([0., 0., 0.])
+
+        return origin
+    
+    @property
+    def affine(self):
+        affine = np.eye(4, 4) * np.array([self.metadata.voxel_size_z,
+                                            self.metadata.voxel_size_y,
+                                            self.metadata.voxel_size_x, 1], dtype=np.float)
+        affine[:3, 3] = np.array([self.metadata.origin_z,
+                                  self.metadata.origin_y,
+                                  self.metadata.origin_x], dtype=np.float)
+        return affine
+    
+    @property
+    def stack_shape(self):
+
+        return np.array([self.stack_size, self.data_shape[1], self.data_shape[2]],
+                        dtype=np.uint32)
+    
+    @property
+    def overhead_stack_shape(self):
+        return np.array([self.data_shape[0] - (self.stack_size * self.num_of_stacks),
+                         self.data_shape[1],
+                         self.data_shape[2]],
+                        dtype=np.uint16)
+    
+
+    def read_next_chunk(self, file_handle, chunk_size, decompresser):
+        even_tally = False
+        buffer = b''
+        while not even_tally:
+            tmp = file_handle.read(chunk_size)
+            if self.compressed:
+                tmp = decompresser.decompress(tmp)
+            buffer += tmp
+            if len(buffer) % self.bytes_per_sample == 0:
+                even_tally = True
+                logger.debug("Got even tally")
+
+        chunk = np.frombuffer(buffer, self.np_pixel_type)
+        return chunk
+    
+
+    def read_next_stack(self, file_handle, chunk_size, decompresser, stack_size):
+        values_to_read = stack_size * self.stack_shape[1] * self.stack_shape[2]
+        values = np.append(self.working_buffer,
+                           self.read_next_chunk(file_handle, chunk_size, decompresser),
+                           axis=0)
+        while len(values) < values_to_read:
+            logger.debug("Values: {}".format(len(values)))
+            values = np.append(values,
+                               self.read_next_chunk(file_handle, chunk_size, decompresser),
+                               axis=0)
+            
+        current_stack = values[:values_to_read]
+        current_stack = current_stack.reshape((stack_size, self.stack_shape[1], self.stack_shape[2]))
+        self.working_buffer = values[values_to_read:]
+
+        return current_stack
+        
+
+    def stream_data(self):
+        decompresser = zlib.decompressobj(self.metadata.bits_per_sample + zlib.MAX_WBITS)
+        chunk_size = 1024 * 1024 * 64 * 16
+
+        logger.debug("Opening file for streaming..")
+        file_handle = open(self.metadata.data_path,'rb')
+        
+        stack_size = self.stack_size
+        current_idx = 0
+
+        while current_idx < self.data_shape[0]:
+
+            stack = self.read_next_stack(file_handle, chunk_size, decompresser, stack_size)
+            current_idx += stack.shape[0]
+
+            if self.data_shape[0] - current_idx < self.stack_shape[0]:
+                logger.debug("SMALLER")
+                stack_size = self.data_shape[0] - current_idx
+            logger.debug("current index {}".format(current_idx))
+            logger.debug("data_shape[0] {}".format(self.data_shape[0]))
+            logger.debug(".stack_shape[0]{}".format(self.stack_shape[0]))
+
+            yield stack
+        
+        file_handle.close()
+
+
+        
+        
 
 
 class StreamableTiffProxy(ImageProxy):
