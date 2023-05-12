@@ -89,10 +89,10 @@ class LightMicroscopyHDF(object):
         try:
             if not os.path.exists(os.path.dirname(self.file_path)):
                 os.makedirs(os.path.dirname(self.file_path))
-            self.h5_file = h5py_cache.File(self.file_path, access_mode, chunk_cache_mem_size=1024 ** 3, libver='latest')
+            self.h5_file = h5py_cache.File(self.file_path, access_mode, chunk_cache_mem_size= 1024 *1024 * 64, libver='latest')
         except IOError as e:
             if e.errno == errno.EACCES:
-                self.h5_file = h5py_cache.File(self.file_path, 'r', chunk_cache_mem_size=1024 ** 3,
+                self.h5_file = h5py_cache.File(self.file_path, 'r', chunk_cache_mem_size=1024 *1024 * 64,
                                                libver='latest')
             else:
                 logger.error("File not found or couldn't open file", exc_info=True)
@@ -257,7 +257,7 @@ class LightMicroscopyHDF(object):
                 meta_image = processing.MetaImage.meta_image_from_channel(data, _channel)
                 if _channel.image.is_stream:
                     logger.debug("Processing data : {}/{}".format(data_idx + 1,
-                                                                  _channel.image.num_of_stacks))
+                                                                  _channel.image.num_of_stacks + 1))
                 for level_num, pyramid_level in enumerate(_channel.levels):
 
                     if level_num == 0:
@@ -267,7 +267,9 @@ class LightMicroscopyHDF(object):
                             writing_slice = slice(data_idx * pyramid_level.stack_shape[0],
                                                   data_idx * pyramid_level.stack_shape[0] + data.shape[0])
                         try:
+                            logger.debug("Writing main level")
                             data_sets[level_num][writing_slice, :, :] = data
+                            logger.debug("Done writing main level")
                         except TypeError:
                             logger.error("Probably wrong data shape", exc_info=True)
                             raise
@@ -285,7 +287,9 @@ class LightMicroscopyHDF(object):
                                                   data_idx * pyramid_level.stack_shape[0] +
                                                   meta_image.data_shape[0])
                         try:
+                            logger.debug("Writing sublevel")
                             data_sets[level_num][writing_slice, :, :] = meta_image.data
+                            logger.debug("done writing sublevel")
                         except TypeError:
                             logger.error("Probably wrong data shape", exc_info=True)
                             raise
@@ -1098,16 +1102,23 @@ def test_proxy(input_path, json_path):
     meta.update(json_meta)
 
     # ip = StreamableTiffProxy('autofluo', ' mysz_2', "auto_8_Z%03d.ome.tif", meta, 0.3)
-    ip = image.StreamableOMEProxy('cfos', 'fos_4', None, meta, 1)
+    #ip = image.StreamableOMEProxy('cfos', 'fos_4', None, meta, 1)
+    ip = image.StreamableNrrdProxy('N11', 'test_mgre', metadata=meta,
+                                    xml_file_name="test_mgre.xml", RAM_limit=2.,
+                                    multifile_prefix=None)
     # ip = NonStreamableTiffProxy('cfos', 'mysz', None, meta, None)
     # ip = NiftiProxy('autofluo', 'exp2', None, meta, None)
     print(ip)
+    page =0
 
     k = 0
     for data_chunk in ip.stream_data():
-        if k > 0:
-            return
+        page += data_chunk.shape[0]
+        if page >= 4:
+            np.save("/data/sbednarek/pnas23/lsfm_sample2.npy", data_chunk, allow_pickle=False)
+            exit()
         print((data_chunk.shape))
+        print(page)
         k += 1
 
 
@@ -1123,7 +1134,7 @@ def test_lmdhf(image_path, json_path, hdf_path, multichannel=False):
     # ip = ImageProxy.get_image_proxy_class(meta)('cfos', 'mysz', 'Z%06d.tif', meta, 'check_roi_bigger.xml', 4.,
     #                                           is_multichannel=multichannel)
 
-    ip = image.ImageProxy.get_image_proxy_class(meta)('cfos', 'mysz', None, meta, 'check_roi_bigger.xml', 4.,
+    ip = image.ImageProxy.get_image_proxy_class(meta)('autofluo', 'N11', None, meta, 'N11.xml', 2.,
                                                 is_multichannel=multichannel)
     # ip = StreamableOMEProxy('cfos', 'fos_4', None, meta, 1)
 
@@ -1482,6 +1493,13 @@ if __name__ == '__main__':
 
     input_path = '/media/sbednarek/4BCFEE837AD4D9DD/Diana/new_autofluo_2018_01/fos_8/Z_planes/auto_8_Z000.ome.tif'
     json_path = '/home/sbednarek/DEV/lsfm/results/fos_8_metadata.json'
+    input_path = '/data/sbednarek/pnas23/200302-1-1_N09_N58181_mGRE_M4D.nhdr'
+    json_path = '/data/sbednarek/pnas23/test.json'
+    #input_path = '/data/sbednarek/pnas23/200302-1-1_N09_N58181_mGRE_M4D.nii.gz'
+    #json_path = '/data/sbednarek/pnas23/test_nii.json'
+    input_path = '/home/sbednarek/neuroinfC/sbednarek/200302-1-1_N11_N58211NLSAM_autof_M4D.nhdr'
+    json_path = '/home/sbednarek/neuroinfC/sbednarek/200302-1-1_N11_N58211NLSAM_autof_M4D.json'
+
     ome_input_path = '/media/sbednarek/4BCFEE837AD4D9DD/Ctr1.ome.tif'
     ome_json_path = '/home/sbednarek/DEV/lsfm_schema/lsfm_image_server/results/metadata/ctr1_ome.json'
     single_input_path = '/media/sbednarek/4BCFEE837AD4D9DD/TDPrat_mapa_terasticher_downsampled.tif'
@@ -1504,7 +1522,9 @@ if __name__ == '__main__':
     exp_4_json = '/home/sbednarek/DEV/lsfm_schema/lsfm_image_server/resources/647-exp4.json'
     exp_4_path = '/home/sbednarek/DEV/lsfm_schema/lsfm_image_server/resources/exp4_cfos/Z000000.tif'
 
-    # test_proxy(input_path, json_path)
+    #test_proxy(input_path, json_path)
+    test_lmdhf(input_path, json_path, '/data/sbednarek/pnas23/N11.h5')
+
     # test_proxy(ome_input_path, ome_json_path)
     # test_proxy(single_input_path, single_json_path)
     # test_proxy(nifti_path, nifti_json_path)
