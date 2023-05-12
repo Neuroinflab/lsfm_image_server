@@ -82,6 +82,7 @@ class InputImageType(Enum):
     ImageJTiff = 2
     MultipleTiff = 3
     Nifti = 4
+    Nrrd = 5
 
 
 class ImageComponentType(Enum):
