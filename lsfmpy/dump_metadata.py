@@ -33,6 +33,7 @@ Example usage:
 dump_metadata.py --input-file=example.nii.gz --output-file=metadata.json
 """
 import os
+import re
 import sys
 import json
 import glob
@@ -43,6 +44,7 @@ import nibabel as nib
 import tifffile as tf
 
 from os import path
+from medpy import io as medio
 from lxml import objectify
 from .utils import InputImageType
 
@@ -51,14 +53,16 @@ VALID_EXTENSIONS = ["tif",
                     "nii",
                     "nii.gz",
                     "ome.tif",
-                    "ome.tiff"]
+                    "ome.tiff",
+                    "nhdr"]
 
 FILE_TYPE = {'tif': InputImageType.Tiff,
              'tiff': InputImageType.Tiff,
              'ome.tif': InputImageType.OmeTiff,
              'ome.tiff': InputImageType.OmeTiff,
              'nii': InputImageType.Nifti,
-             'nii.gz': InputImageType.Nifti}
+             'nii.gz': InputImageType.Nifti,
+             'nhdr': InputImageType.Nrrd}
 
 
 def is_image_source_valid(file_path):
@@ -111,13 +115,68 @@ class ImageMetaData(dict):
             raise AttributeError("No such attribute: " + name)
 
     def sanitize_types(self):
-        self["image_size_x"] = np.int(self["image_size_x"])
-        self["image_size_y"] = np.int(self["image_size_y"])
-        self["image_size_z"] = np.int(self["image_size_z"])
+        self["image_size_x"] = int(self["image_size_x"])
+        self["image_size_y"] = int(self["image_size_y"])
+        self["image_size_z"] = int(self["image_size_z"])
         self["voxel_size_x"] = np.float64(self["voxel_size_x"])
         self["voxel_size_y"] = np.float64(self["voxel_size_y"])
         self["voxel_size_z"] = np.float64(self["voxel_size_z"])
-        self["bits_per_sample"] = np.int(self["bits_per_sample"])
+        self["bits_per_sample"] = int(self["bits_per_sample"])
+
+
+class NrrdImageMetaData(ImageMetaData):
+    """
+    Helper class parsing information from .nhdr header file.
+    """
+
+    def __parse(self, file_path):
+        self["image_size_x"] = 0
+        self["image_size_y"] = 0
+        self["image_size_z"] = 0
+        self["voxel_size_x"] = 0
+        self["voxel_size_y"] = 0
+        self["voxel_size_z"] = 0
+        self["bits_per_sample"] = 0
+        self["file_type"] = "Nrrd"
+
+        # header is just a text file so let's read it
+        with open(file_path) as header:
+            for line in header:
+                if re.findall(r'type:', line):
+                    dt = line[6:-1]
+                    self["data_type"] = dt
+                    if dt == 'float':
+                        self["bits_per_sample"] = 32
+                    elif dt == 'unsigned short':
+                        self["bits_per_sample"] = 16
+                if re.findall(r'sizes:', line):
+                    x, y, z =  [int(x) for x in re.findall('\d+', line)]
+                    self["image_size_x"] = x
+                    self["image_size_y"] = y
+                    self["image_size_z"] = z
+                if re.findall(r'space directions:', line):
+                    vx, vy, vz = [float(x) for x in re.findall(r'\-?\d+\.\d+', line)]
+                    self["voxel_size_x"] = vx
+                    self["voxel_size_y"] = vy
+                    self["voxel_size_z"] = vz
+                if re.findall(r'space origin:', line):
+                    ox, oy, oz = [float(x) for x in re.findall(r'\-?\d+\.\d+', line)]
+                    self["origin_x"] = ox
+                    self["origin_y"] = oy
+                    self["origin_z"] = oz
+                if re.findall(r'data file:', line):
+                    path = os.path.split(file_path)[0]
+                    self["data_path"] = os.path.join(path, line[11:-1])
+                if re.findall(r'encoding:', line):
+                    encoding = line[10:-1]
+                    self["encoding"] = encoding
+
+
+    def __setitem__(self, key, value):
+        if key == "file_path" and value:
+            self.__parse(value)
+        ImageMetaData.__setitem__(self, key, value)
+
 
 
 class TiffImageMetaData(ImageMetaData):
@@ -163,7 +222,7 @@ class OmeTiffImageMetaData(ImageMetaData):
         for tag, ome_key in list(self.tagInfoMapfloat.items()):
             self[tag] = np.float64(pixel_info.attrib[ome_key])
         for tag, ome_key in list(self.tagInfoMapint.items()):
-            self[tag] = np.int(pixel_info.attrib[ome_key])
+            self[tag] = np.int16(pixel_info.attrib[ome_key])
         self["bits_per_sample"] = page.bits_per_sample
         self["file_type"] = self.__class__.__name__[:-13]
 
@@ -186,9 +245,9 @@ class ImageJTiffImageMetaData(ImageMetaData):
         if len(shape) == 3:
 
             Z, Y, X = page.shape
-            self["image_size_x"] = np.int(X)
-            self["image_size_y"] = np.int(Y)
-            self["image_size_z"] = np.int(Z)
+            self["image_size_x"] = np.int16(X)
+            self["image_size_y"] = np.int16(Y)
+            self["image_size_z"] = np.int16(Z)
 
             x_denominator, x_nominator = page.tags['x_resolution'].value
             voxel_size_x = x_nominator / x_denominator
@@ -208,8 +267,8 @@ class ImageJTiffImageMetaData(ImageMetaData):
         elif len(shape) == 2:
             print('cannot read all necessary information, please fill in missing values in .json file')
             Y, X = page.shape
-            self["image_size_x"] = np.int(X)
-            self["image_size_y"] = np.int(Y)
+            self["image_size_x"] = np.int16(X)
+            self["image_size_y"] = np.int16(Y)
             self["image_size_z"] = 0
             self["voxel_size_x"] = 0
             self["voxel_size_y"] = 0
@@ -230,13 +289,13 @@ class NiftiImageMetaData(ImageMetaData):
 
     def __parse(self, file_path):
         nii_file = nib.load(file_path)
-        self["image_size_x"] = np.int(nii_file.header['dim'][1])
-        self["image_size_y"] = np.int(nii_file.header['dim'][2])
-        self["image_size_z"] = np.int(nii_file.header['dim'][3])
+        self["image_size_x"] = int(nii_file.header['dim'][1])
+        self["image_size_y"] = int(nii_file.header['dim'][2])
+        self["image_size_z"] = int(nii_file.header['dim'][3])
         self["voxel_size_x"] = np.float64(nii_file.header['pixdim'][1])
         self["voxel_size_y"] = np.float64(nii_file.header['pixdim'][2])
         self["voxel_size_z"] = np.float64(nii_file.header['pixdim'][3])
-        self["bits_per_sample"] = np.int(nii_file.header['bitpix'])
+        self["bits_per_sample"] = int(nii_file.header['bitpix'])
         self["file_type"] = self.__class__.__name__[:-13]
 
     def __setitem__(self, key, value):
@@ -313,7 +372,7 @@ if __name__ == "__main__":
     print(meta_data)
     print("Please make sure that voxel sizes are in mm.")
     if not ref_path:
-        fill_in = eval(input("Do you want to fill in missing values now? (y/n) \n"))
+        fill_in = eval(input("Would you like to fill in missing values now? (y/n) \n"))
 
         if fill_in.lower() == 'y':
             tifs_in_folder = len(glob.glob(os.path.join(os.path.dirname(file_path), '*.tif')))
