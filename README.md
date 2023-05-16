@@ -216,3 +216,16 @@ lsfmpy write \
         --image-path ./example_data/cfos/Z000000.tif \
         --bdv-xml 000001.xml
 ```
+
+### Image registration to the Allen Mouse Common Coordinate Framework v3 (CCF v3) template
+
+In the `00_reference` directory, you will find a preprocessed Allen Mouse CCFv3 dataset, comprising the template and the segmentation as nifti files at a 25µm isotropic resolution in RAS orientation. The `labels.txt` file contains annotation descriptions compatible with the ITKSnap viewer.
+
+Edit the `step_01_set_up_images.sh` script to change the path to the source hdf5 file, channel names, and input orientation. To export nifti images for the registration out of the hdf container, run the following command:
+
+```
+bash step_01_set_up_images.sh
+```
+
+
+<p align="center"><img style="background-color:white;" width=35% src=https://github.com/Neuroinflab/lsfm_image_server/blob/tutorial/media/figure_S2.svg?raw="true"></img></p>
