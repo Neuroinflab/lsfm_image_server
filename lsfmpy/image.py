@@ -405,7 +405,7 @@ class StreamableNrrdProxy(ImageProxy):
 
     def stream_data(self):
         decompresser = zlib.decompressobj(self.metadata.bits_per_sample + zlib.MAX_WBITS)
-        chunk_size = 1024 * 1024 * 64 * 16
+        chunk_size = 1024 * 1024 * 64 
 
         logger.debug("Opening file for streaming..")
         file_handle = open(self.metadata.data_path,'rb')

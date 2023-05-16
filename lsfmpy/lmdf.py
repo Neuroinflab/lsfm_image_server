@@ -46,7 +46,7 @@ from . import processing
 from . import dump_metadata as dm
 from . import constants as const
 
-from .utils import PathUtil
+from .utils import PathUtil, highestPowerof2
 #from scipy.misc import imsave
 
 import logging
@@ -345,6 +345,7 @@ class LightMicroscopyHDF(object):
             self.bdv.create_xml_from_setups(_channel.image.xml_file_name, self.file_path)
 
         channel = ProxyChannel(image_proxy, self.bdv.number_of_bdv_channels)
+
         create_channel_datasets(channel)
         write_data(channel)
         if create_bdv and not channel.image.is_multichannel and not channel.image.is_segmentation:
@@ -983,6 +984,7 @@ class ProxyChannel(object):
         self.resolutions_path = PathUtil.get_res_path(self.num_bdv_setup)
         self.subdivisions_path = PathUtil.get_sub_path(self.num_bdv_setup)
         self.setup_path = PathUtil.get_setup_path(self.num_bdv_setup)
+        self.max_subdivision = 1024
 
         self.resolutions, self.subdivisions = bdv.BigDataViewer.propose_mipmaps(self.image.voxel_size,
                                                                                 self.image.image_shape)
@@ -1051,6 +1053,8 @@ class ProxyChannel(object):
 
             pyramid_level.shape = shape
             pyramid_level.stack_shape = stack_shape
+            pyramid_level.chunks = tuple([min(self.max_subdivision,
+                                         highestPowerof2(int(x))) for x in pyramid_level.stack_shape])
 
         pyramid_level = ProxyChannel.PyramidLevel()
         pyramid_level.id = 0
@@ -1061,7 +1065,10 @@ class ProxyChannel(object):
         pyramid_level.stack_shape = self.image.stack_shape
         pyramid_level.path = PathUtil.get_lsfm_image_cells_path(self.image.channel_name, 0)
         pyramid_level.bdv_path = PathUtil.get_cells_path(0, self.num_bdv_setup, 0)
-        pyramid_level.chunks = tuple(self.subdivisions[0])
+        logger.debug("0 level shape: {}".format(self.image.stack_shape) )
+        pyramid_level.chunks = tuple([min(self.max_subdivision,
+                                         highestPowerof2(int(x))) for x in pyramid_level.stack_shape])
+        self.subdivisions[0] = pyramid_level.chunks
         self.levels.append(pyramid_level)
 
         if self.num_pyramid_levels == 1:
@@ -1080,17 +1087,19 @@ class ProxyChannel(object):
             pyramid_level.id = level
             pyramid_level.spacing = self.image.voxel_size * 1. / \
                                     self.resolution_scales[level][:len(self.image.voxel_size)]
-
-            pyramid_level.chunks = tuple(self.subdivisions[level])
             self.levels.append(pyramid_level)
             compute_level_shape(level, shape_attr)
+            self.subdivisions[level] = pyramid_level.chunks
+            
 
     class PyramidLevel(object):
         def __repr__(self):
             return "stack shape: {} \n" \
                    "level shape: {}\n" \
+                   "level chunks: {}\n" \
                    "level spacing: {}\n".format(self.stack_shape,
                                                 self.shape,
+                                                self.chunks,
                                                 self.spacing)
 
 
@@ -1134,8 +1143,16 @@ def test_lmdhf(image_path, json_path, hdf_path, multichannel=False):
     # ip = ImageProxy.get_image_proxy_class(meta)('cfos', 'mysz', 'Z%06d.tif', meta, 'check_roi_bigger.xml', 4.,
     #                                           is_multichannel=multichannel)
 
-    ip = image.ImageProxy.get_image_proxy_class(meta)('autofluo', 'N11', None, meta, 'N11.xml', 2.,
+    #ip = image.ImageProxy.get_image_proxy_class(meta)('autofluo', 'N11', None, meta, 'N11.xml', 2.,
+     #                                           is_multichannel=multichannel)
+    #ip = image.ImageProxy.get_image_proxy_class(meta)('M4D', 'N08', None, meta, 'N08.xml', 2.,
+    #                                            is_multichannel=multichannel)
+    #ip = image.ImageProxy.get_image_proxy_class(meta)('rd', 'N05', None, meta, 'N05.xml', 2.,
+    #                                            is_multichannel=multichannel)
+    
+    ip = image.ImageProxy.get_image_proxy_class(meta)('cfos', 'N71', 'Z%06d.tif', meta, 'N71.xml', 2.,
                                                 is_multichannel=multichannel)
+    
     # ip = StreamableOMEProxy('cfos', 'fos_4', None, meta, 1)
 
     lm_test = LightMicroscopyHDF(hdf_path)
@@ -1495,10 +1512,24 @@ if __name__ == '__main__':
     json_path = '/home/sbednarek/DEV/lsfm/results/fos_8_metadata.json'
     input_path = '/data/sbednarek/pnas23/200302-1-1_N09_N58181_mGRE_M4D.nhdr'
     json_path = '/data/sbednarek/pnas23/test.json'
+    input_path = '/data/sbednarek/neuroinfB_slash_data/data/lsfmpy_tutorial/lsfm_image_server/example_data/cfos/Z000000.tif'
+    json_path = '/data/sbednarek/neuroinfB_slash_data/data/lsfmpy_tutorial/lsfm_image_server/cfos.json'
     #input_path = '/data/sbednarek/pnas23/200302-1-1_N09_N58181_mGRE_M4D.nii.gz'
     #json_path = '/data/sbednarek/pnas23/test_nii.json'
-    input_path = '/home/sbednarek/neuroinfC/sbednarek/200302-1-1_N11_N58211NLSAM_autof_M4D.nhdr'
-    json_path = '/home/sbednarek/neuroinfC/sbednarek/200302-1-1_N11_N58211NLSAM_autof_M4D.json'
+    #input_path = '/home/sbednarek/neuroinfC/sbednarek/200302-1-1_N11_N58211NLSAM_autof_M4D.nhdr'
+    #json_path = '/home/sbednarek/neuroinfC/sbednarek/200302-1-1_N11_N58211NLSAM_autof_M4D.json'
+    
+
+    #input_path = '/home/sbednarek/neuroinfC/sbednarek/200302-1-1_N07_N58211NLSAM_tdi3-color_blue_M4D.nhdr'
+    #json_path = '/home/sbednarek/neuroinfC/sbednarek/200302-1-1_N07_N58211NLSAM_tdi3-color_blue_M4D.json'
+    #input_path = '/home/sbednarek/neuroinfC/sbednarek/200302-1-1_N08_N58211NLSAM_md_M4D.nhdr'
+    #json_path = '/home/sbednarek/neuroinfC/sbednarek/200302-1-1_N08_N58211NLSAM_md_M4D.json'
+    #input_path = '/home/sbednarek/neuroinfC/sbednarek/200302-1-1_N05_N58211NLSAM_rd_M4D.nhdr'
+    #json_path = '/home/sbednarek/neuroinfC/sbednarek/200302-1-1_N05_N58211NLSAM_rd_M4D.json'
+    #input_path = '/home/sbednarek/neuroinfC/sbednarek/200302-1-1_N09_N58181_mGRE_M4D.nhdr'
+    #json_path = '/home/sbednarek/neuroinfC/sbednarek/200302-1-1_N09_N58181_mGRE_M4D.json'
+    
+   
 
     ome_input_path = '/media/sbednarek/4BCFEE837AD4D9DD/Ctr1.ome.tif'
     ome_json_path = '/home/sbednarek/DEV/lsfm_schema/lsfm_image_server/results/metadata/ctr1_ome.json'
@@ -1523,7 +1554,7 @@ if __name__ == '__main__':
     exp_4_path = '/home/sbednarek/DEV/lsfm_schema/lsfm_image_server/resources/exp4_cfos/Z000000.tif'
 
     #test_proxy(input_path, json_path)
-    test_lmdhf(input_path, json_path, '/data/sbednarek/pnas23/N11.h5')
+    test_lmdhf(input_path, json_path, '/data/sbednarek/pnas23/N71.h5')
 
     # test_proxy(ome_input_path, ome_json_path)
     # test_proxy(single_input_path, single_json_path)
