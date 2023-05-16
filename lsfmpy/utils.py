@@ -76,6 +76,16 @@ def read_image(img_path):
 parallel_read_image = parallelize(read_image, n_processes=15)
 
 
+def highestPowerof2(N):
+ 
+    # if N is a power of two simply return it
+    if (not (N & (N - 1))):
+        return N;
+         
+    # else set only the most significant bit
+    return 0x8000000000000000 >>  (64 - N.bit_length())
+
+
 class InputImageType(Enum):
     Tiff = 0
     OmeTiff = 1
