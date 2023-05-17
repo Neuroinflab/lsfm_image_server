@@ -31,7 +31,6 @@ import copy
 import errno
 import imageio
 import inspect
-import h5py_cache
 
 import numpy as np
 import nibabel as nib
@@ -89,11 +88,10 @@ class LightMicroscopyHDF(object):
         try:
             if not os.path.exists(os.path.dirname(self.file_path)):
                 os.makedirs(os.path.dirname(self.file_path))
-            self.h5_file = h5py_cache.File(self.file_path, access_mode, chunk_cache_mem_size= 1024 *1024 * 64, libver='latest')
+            self.h5_file = h5py.File(self.file_path, access_mode, rdcc_nbytes=1024 * 1024 * 64, libver='latest')
         except IOError as e:
             if e.errno == errno.EACCES:
-                self.h5_file = h5py_cache.File(self.file_path, 'r', chunk_cache_mem_size=1024 *1024 * 64,
-                                               libver='latest')
+                self.h5_file = h5py.File(self.file_path, 'r', rdcc_nbytes=1024 * 1024 * 64, libver='latest')
             else:
                 logger.error("File not found or couldn't open file", exc_info=True)
                 raise
@@ -1554,7 +1552,7 @@ if __name__ == '__main__':
     exp_4_path = '/home/sbednarek/DEV/lsfm_schema/lsfm_image_server/resources/exp4_cfos/Z000000.tif'
 
     #test_proxy(input_path, json_path)
-    test_lmdhf(input_path, json_path, '/data/sbednarek/pnas23/N71.h5')
+    test_lmdhf(input_path, json_path, '/data/sbednarek/pnas23/tmpN71.h5')
 
     # test_proxy(ome_input_path, ome_json_path)
     # test_proxy(single_input_path, single_json_path)
