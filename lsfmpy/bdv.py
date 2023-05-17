@@ -198,7 +198,7 @@ class BigDataViewer(object):
         np.set_printoptions(suppress=True, precision=4)
 
         if partition_fnames is None:
-            affinev = [''.join(np.str(
+            affinev = [''.join(str(
                 list(np.hstack(img_affine[:-1])))[1:-1].split(','))
                        for img_affine in img_affines]
         else:
