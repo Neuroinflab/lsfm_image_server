@@ -617,6 +617,9 @@ class NonStreamableTiffProxy(ImageProxy):
     @property
     def stack_size(self):
         return self.data_shape[0]
+    
+    def stack_shape(self):
+        return self.data_shape
 
     def _read_image(self, img_path):
         return tf.TiffFile(img_path)
@@ -656,7 +659,7 @@ class NiftiProxy(ImageProxy):
             raise
 
         assert ImageProxy.get_available_ram() > self.size
-        self.data = self.image.get_data()
+        self.data =  np.asanyarray(self.image.dataobj)
         if len(self.data.shape) == 5:
             self.data = self.data[:, :, :, 0, :]
 
@@ -668,6 +671,10 @@ class NiftiProxy(ImageProxy):
     @property
     def stack_size(self):
         return self.data_shape[0]
+    
+    @property
+    def stack_shape(self):
+        return self.data_shape
 
     @property
     def nifti_affine(self):
