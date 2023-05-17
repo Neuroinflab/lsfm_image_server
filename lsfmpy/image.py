@@ -512,7 +512,8 @@ class StreamableTiffProxy(ImageProxy):
                 logger.debug("Next stream slice: {}".format(next_indices))
                 paths = [self._craft_img_path(n) for n in next_indices]
                 data = parallel_read_image(paths)
-                data = np.dstack(np.array(sorted(data, key=lambda x: x[1]))[:, 0])
+                sorted_data = sorted(data, key=lambda x: x[1])
+                data = np.dstack(np.array([plane[0] for plane in sorted_data]))
                 logger.debug("done reading and sorting")
             except IOError:
                 logger.error("Could not open file", exc_info=True)
