@@ -1143,13 +1143,13 @@ def test_lmdhf(image_path, json_path, hdf_path, multichannel=False):
 
     #ip = image.ImageProxy.get_image_proxy_class(meta)('autofluo', 'N11', None, meta, 'N11.xml', 2.,
      #                                           is_multichannel=multichannel)
-    #ip = image.ImageProxy.get_image_proxy_class(meta)('M4D', 'N08', None, meta, 'N08.xml', 2.,
-    #                                            is_multichannel=multichannel)
+    ip = image.ImageProxy.get_image_proxy_class(meta)('M4D', 'N08', None, meta, 'N08.xml', 2.,
+                                                is_multichannel=multichannel)
     #ip = image.ImageProxy.get_image_proxy_class(meta)('rd', 'N05', None, meta, 'N05.xml', 2.,
     #                                            is_multichannel=multichannel)
     
-    ip = image.ImageProxy.get_image_proxy_class(meta)('cfos', 'N71', 'Z%06d.tif', meta, 'N71.xml', 2.,
-                                                is_multichannel=multichannel)
+    #ip = image.ImageProxy.get_image_proxy_class(meta)('cfos', 'N71', 'Z%06d.tif', meta, 'N71.xml', 2.,
+    #                                            is_multichannel=multichannel)
     
     # ip = StreamableOMEProxy('cfos', 'fos_4', None, meta, 1)
 
@@ -1510,10 +1510,10 @@ if __name__ == '__main__':
     json_path = '/home/sbednarek/DEV/lsfm/results/fos_8_metadata.json'
     input_path = '/data/sbednarek/pnas23/200302-1-1_N09_N58181_mGRE_M4D.nhdr'
     json_path = '/data/sbednarek/pnas23/test.json'
-    input_path = '/data/sbednarek/neuroinfB_slash_data/data/lsfmpy_tutorial/lsfm_image_server/example_data/cfos/Z000000.tif'
-    json_path = '/data/sbednarek/neuroinfB_slash_data/data/lsfmpy_tutorial/lsfm_image_server/cfos.json'
-    #input_path = '/data/sbednarek/pnas23/200302-1-1_N09_N58181_mGRE_M4D.nii.gz'
-    #json_path = '/data/sbednarek/pnas23/test_nii.json'
+    #input_path = '/data/sbednarek/neuroinfB_slash_data/data/lsfmpy_tutorial/lsfm_image_server/example_data/cfos/Z000000.tif'
+    #json_path = '/data/sbednarek/neuroinfB_slash_data/data/lsfmpy_tutorial/lsfm_image_server/cfos.json'
+    input_path = '/data/sbednarek/pnas23/200302-1-1_N09_N58181_mGRE_M4D.nii.gz'
+    json_path = '/data/sbednarek/pnas23/test_nii.json'
     #input_path = '/home/sbednarek/neuroinfC/sbednarek/200302-1-1_N11_N58211NLSAM_autof_M4D.nhdr'
     #json_path = '/home/sbednarek/neuroinfC/sbednarek/200302-1-1_N11_N58211NLSAM_autof_M4D.json'
     
