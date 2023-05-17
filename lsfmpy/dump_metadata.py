@@ -44,7 +44,6 @@ import nibabel as nib
 import tifffile as tf
 
 from os import path
-from medpy import io as medio
 from lxml import objectify
 from .utils import InputImageType
 
