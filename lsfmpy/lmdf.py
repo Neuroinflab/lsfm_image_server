@@ -626,8 +626,8 @@ class HDFChannel(object):
     def find_suitable_spacing_level(self, resolution):
         if resolution is None:
             raise ValueError("You must provide resolution or pyramid level for export!")
-        spacings = np.array(self.p_voxel_sizes, dtype=np.float)
-        resolution = np.array(resolution, dtype=np.float)
+        spacings = np.array(self.p_voxel_sizes, dtype=np.float64)
+        resolution = np.array(resolution, dtype=np.float64)
         msk = list(map(np.all, spacings <= resolution))
         distances = list(map(np.linalg.norm, (spacings[msk] - resolution)))
         if len(distances) == 0:
