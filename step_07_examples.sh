@@ -96,7 +96,7 @@ sleep 1
 # Native resolution chunk at arbitrary physical location
 lsfmpy \
     export \
-	--hdf-path ${HDF_SRC_PATH} \
+	--hdf-path ${HDF5_SRC_PATH} \
 	--channel-name cfos \
 	--input-orientation RPI \
 	--phys-origin 1.76,6.91,2.01 \
