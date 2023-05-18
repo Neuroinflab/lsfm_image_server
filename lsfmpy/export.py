@@ -68,12 +68,12 @@ class ImageExporter(object):
     def _compute_indices(self):
 
         self.start_os_mm = self.export_cmd.phys_origin
-        self.chunk_size_in_voxels = (self.export_cmd.phys_size // self.voxel_size).astype(np.int)
+        self.chunk_size_in_voxels = (self.export_cmd.phys_size // self.voxel_size).astype(int)
         self.end_os_mm = np.array(self.export_cmd.phys_origin) + \
                          np.array(self.export_cmd.phys_size) * np.array([1, 1, -1.])
 
         self.start_is_mm = np.abs(self.ct.composite.TransformPoint(self.start_os_mm)) * np.array([1, 1, -1.])
-        self.start_index = np.abs(np.around(self.affine_pv.TransformPoint(self.start_is_mm)).astype(np.int))
+        self.start_index = np.abs(np.around(self.affine_pv.TransformPoint(self.start_is_mm)).astype(int))
 
         self.end_index = self.start_index + self.chunk_size_in_voxels
         self.start_index = np.array(self.start_index)[self.transpose_tuple.inv_transpose]
@@ -147,8 +147,8 @@ class ImageRegionExporter(ImageExporter):
             self.end_is_mm += (margin_mm * np.array([1., 1., -1.]))
             logger.debug("start_is after margin: {}".format(self.start_is_mm))
             logger.debug("end_is_mm after margin: {}".format(self.end_is_mm))
-        self.start_index = np.abs(np.around(self.affine_pv.TransformPoint(self.start_is_mm)).astype(np.int))
-        self.end_index = np.abs(np.around(self.affine_pv.TransformPoint(self.end_is_mm)).astype(np.int))
+        self.start_index = np.abs(np.around(self.affine_pv.TransformPoint(self.start_is_mm)).astype(int))
+        self.end_index = np.abs(np.around(self.affine_pv.TransformPoint(self.end_is_mm)).astype(int))
         self.start_index = np.array(self.start_index)[self.transpose_tuple.inv_transpose]
         self.end_index = np.array(self.end_index)[self.transpose_tuple.inv_transpose]
 
@@ -170,7 +170,7 @@ class ImageWholeExporter(ImageExporter):
             self.start_is_mm = self.origin
             self.start_os_mm = self.ct.affine_composite.GetInverse().TransformPoint(self.start_is_mm)
 
-        self.start_index = np.abs(np.around(self.affine_pv.TransformPoint(self.start_is_mm)).astype(np.int))
+        self.start_index = np.abs(np.around(self.affine_pv.TransformPoint(self.start_is_mm)).astype(int))
         self.chunk_size_in_voxels = self.shape
         self.end_index = self.start_index + self.chunk_size_in_voxels
         self.start_index = np.array(self.start_index)[self.transpose_tuple.inv_transpose]
