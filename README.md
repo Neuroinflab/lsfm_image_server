@@ -5,12 +5,12 @@
 [![License](https://img.shields.io/badge/License-GPL%20v3-blue.svg)](https://www.gnu.org/licenses/gpl-3.0) 
 
 
-<img src="https://raw.githubusercontent.com/Neuroinflab/lsfm_image_server/lsfm_dev/media/thumbnail.png" align="left" alt="logo" width="90" height="90"/>
+<img src="https://raw.githubusercontent.com/Neuroinflab/lsfm_image_server/lsfmpy_dev/media/thumbnail.png" align="left" alt="logo" width="90" height="90"/>
 
 LSFMPy - python library for processing 3D light sheet fluorescence microscopy images
 =====================
 
-<p align="center"><img width=65% src=https://github.com/Neuroinflab/lsfm_image_server/blob/lsfm_dev/media/lsfmpy-github-fig-contents.png?raw="true"></img></p>
+<p align="center"><img width=65% src=https://github.com/Neuroinflab/lsfm_image_server/blob/lsfmpy_dev/media/lsfmpy-github-fig-contents.png?raw="true"></img></p>
 
 ### Contents
 
@@ -221,7 +221,7 @@ bash step_06_write_to_hdf.sh
 
 1.  Export the autofluorescence channel at 10 µm resolution, mapped to template
 
-<p align="center"><img width=65% src=https://raw.githubusercontent.com/Neuroinflab/lsfm_image_server/lsfm_dev/media/auto_in_temp_10um.gif></img></p>
+<p align="center"><img width=65% src=https://raw.githubusercontent.com/Neuroinflab/lsfmpy_image_server/lsfm_dev/media/auto_in_temp_10um.gif></img></p>
 
 ```bash
 lsfmpy \
@@ -267,7 +267,7 @@ lsfmpy \
 ```
 2. Export Anterodorsal nucleus region resampled to 2 µm resolution in signal channel, mapped to template
 
-<p align="center"><img width=65% src=https://raw.githubusercontent.com/Neuroinflab/lsfm_image_server/lsfm_dev/media/AD_cfos_in_template_2um.gif></img></p>
+<p align="center"><img width=65% src=https://raw.githubusercontent.com/Neuroinflab/lsfm_image_server/lsfmpy_dev/media/AD_cfos_in_template_2um.gif></img></p>
 
 ```bash
 lsfmpy \
